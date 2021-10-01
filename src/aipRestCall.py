@@ -13,7 +13,7 @@ class AipRestCall(RestCall):
         '60016':'Security',
         '60011':'Transferability',
         '60012':'Changeability',
-        '60015':'SEI Maintainability',
+#        '60015':'SEI Maintainability',
         '66033':'Documentation'
     }
 
@@ -32,8 +32,37 @@ class AipRestCall(RestCall):
                 domain_id = list(filter(lambda x:x["schema"].lower()==schema_name.lower(),json))[0]['name']
             except IndexError:
                 self.error(f'Domain not found for schema {schema_name}')
-                
+        if status == 0:
+            domain_id = -1        
         return domain_id
+
+    def get_quality_indicators(self,domain_id,snapshot_id, key):
+        self.debug(f'retrieving quality indicators information for {domain_id}/{key}')
+        url = f'{domain_id}/quality-indicators/{key}/snapshots/{snapshot_id}'
+
+        (status,json) = self.get(url)
+        if status == codes.ok and len(json) > 0:
+            return json['gradeContributors']
+        else:
+            return None
+
+    def get_violation_ratio(self,domain_id, key):
+        self.debug(f'retrieving violation ratio information for {domain_id}/{key}')
+        url = f'{domain_id}/applications/3/results?quality-indicators=cc:{key},nc:{key}&select=violationRatio'
+        (status,json) = self.get(url)
+        if status == codes.ok and len(json) > 0:
+            return json[0]['applicationResults']
+        else:
+            return None
+
+    def get_grade(self,domain_id, key):
+        self.debug(f'retrieving grade information for {domain_id}/{key}')
+        url = f'{domain_id}/applications/3/results?quality-indicators={key}'
+        (status,json) = self.get(url)
+        if status == codes.ok and len(json) > 0:
+            return json[0]['applicationResults']
+        else:
+            return None
 
     def get_latest_snapshot(self,domain_id):
         self.debug(f'retrieving latest snapshot information for {domain_id}')
