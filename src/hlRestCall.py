@@ -4,6 +4,7 @@ from pandas import DataFrame
 from pandas import json_normalize
 from pandas import concat
 
+
 class HLRestCall(RestCall):
     """
     Class to handle HL REST API calls.
@@ -61,6 +62,23 @@ class HLRestCall(RestCall):
                 if id['name'].lower()==app_name.lower():
                     return id['id']
             raise KeyError (f'Application not found')
+
+    def get_cloud_data(self,app_id):
+        url = f'domains/{self._hl_instance}/applications/{app_id}'
+        (status, json) = self.get(url)
+        if status == codes.ok and len(json) > 0:
+            cloud_data = json['metrics'][0]['cloudReadyDetail']
+            rslt = DataFrame()
+            for d in cloud_data:
+                cd = json_normalize(d['cloudReadyDetails'])
+                cd['Technology']=d['technology']
+                cd['Scan']=d['cloudReadyScan']
+                rslt = concat([rslt,cd],ignore_index=True)
+
+            return rslt
+        else: 
+            return None
+
 
     def get_third_party(self, app_id):
         cves = DataFrame()
