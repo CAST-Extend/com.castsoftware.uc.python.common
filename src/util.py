@@ -1,4 +1,12 @@
 import pandas as pd
+def get_between(txt,tag_start,tag_end,start_at=0):
+    text = txt[start_at:]
+    
+    start = text[start_at:].find(f"{tag_start}")+len(f"{tag_start}")
+    end = text[start:].find(f"{tag_end}")
+    between = text[start:start+end].strip()
+
+    return between,start,end,start-len(tag_start),end+len(tag_end)
 
 def list_to_text(list):
     rslt = ""
