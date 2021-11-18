@@ -61,20 +61,22 @@ class HLRestCall(RestCall):
             for id in json:
                 if id['name'].lower()==app_name.lower():
                     return id['id']
-            raise KeyError (f'Application not found')
+            raise KeyError (f'Application not found: {app_name}')
 
     def get_cloud_data(self,app_id):
         url = f'domains/{self._hl_instance}/applications/{app_id}'
         (status, json) = self.get(url)
         if status == codes.ok and len(json) > 0:
-            cloud_data = json['metrics'][0]['cloudReadyDetail']
             rslt = DataFrame()
-            for d in cloud_data:
-                cd = json_normalize(d['cloudReadyDetails'])
-                cd['Technology']=d['technology']
-                cd['Scan']=d['cloudReadyScan']
-                rslt = concat([rslt,cd],ignore_index=True)
-
+            try:
+                cloud_data = json['metrics'][0]['cloudReadyDetail']
+                for d in cloud_data:
+                    cd = json_normalize(d['cloudReadyDetails'])
+                    cd['Technology']=d['technology']
+                    cd['Scan']=d['cloudReadyScan']
+                    rslt = concat([rslt,cd],ignore_index=True)
+            except KeyError as e:
+                self.warning('Error retrieving cloud ready information')
             return rslt
         else: 
             return None
