@@ -30,6 +30,7 @@ class AipRestCall(RestCall):
 
     def get_domain(self, schema_name):
         self.debug(f'retrieving domain for {schema_name}')
+        schema_name = schema_name.replace('-','_')
         domain_id = None
         (status,json) = self.get()
         if status == codes.ok:
@@ -180,7 +181,7 @@ class AipRestCall(RestCall):
             rule_pattern = rule_pattern.rename(columns={"rule.href":"rule.id"})
 
             component = json_normalize(rslt_df['component']).add_prefix('component.') 
-            component.drop(component.columns.difference(['component.name','component.shortName']),1,inplace=True)
+            component.drop(columns=component.columns.difference(['component.name','component.shortName']),axis=1,inplace=True)
 
             remediation = json_normalize(rslt_df['remedialAction']) 
             rslt_df = rule_pattern.join([component,remediation])                                                  
@@ -210,7 +211,7 @@ class AipRestCall(RestCall):
             rslt_df = rslt_df.sort_values(by=['rule.id'])
             ap_summary_df = rslt_df.groupby(['rule.name']).count()
             business = DataFrame(rslt_df,columns=['rule.name','tech_criteria','Business Criteria','tag','comment']).drop_duplicates()
-            ap_summary_df.drop(ap_summary_df.columns.difference(['rule.name','component.name']),1,inplace=True)
+            ap_summary_df.drop(columns=ap_summary_df.columns.difference(['rule.name','component.name']),axis=1,inplace=True)
             ap_summary_df = merge(ap_summary_df,business, on='rule.name')
             ap_summary_df = ap_summary_df[['rule.name','Business Criteria','component.name','comment','tag','tech_criteria']]
             ap_summary_df = ap_summary_df.rename(columns={'component.name':'No. of Actions',
