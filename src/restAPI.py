@@ -1,15 +1,21 @@
 import urllib.parse
 
-from requests import get
-from requests import exceptions
+from requests import get,exceptions,codes,Session
 from requests.auth import HTTPBasicAuth 
-from requests import codes
+from requests.adapters import HTTPAdapter, Retry
+from requests.exceptions import ConnectionError, ConnectTimeout
+
+#from requests.packages.urllib3.util.retry import Retry
 
 from logger import Logger
 from logging import INFO, error
 from pandas import DataFrame
 from time import perf_counter, ctime
 
+
+__author__ = "Nevin Kaplan"
+__copyright__ = "Copyright 2022, CAST Software"
+__email__ = "n.kaplan@castsoftware.com"
 
 
 class RestCall(Logger):
@@ -20,14 +26,33 @@ class RestCall(Logger):
     _track_time = True
 
     def __init__(self, base_url, user=None, password=None, track_time=False,log_level=INFO):
-        super().__init__("RestCall",log_level)
+        super().__init__(level=log_level)
         if base_url[-1]=='/': 
             base_url=base_url[:-1]
         self._base_url = base_url
         self._track_time = track_time
-        self._auth = HTTPBasicAuth(user, password)
 
-    def get(self, url = "", headers = {'Accept': 'application/json'}):
+        self._session = Session()
+        self._max_retries = 5
+
+        self._adapter = HTTPAdapter(
+                max_retries = Retry(
+                    total = self._max_retries,
+                    backoff_factor = 1,
+                    status_forcelist = [408, 500, 502, 503, 504],
+                )
+        )
+
+        self._session.mount('http://', self._adapter)
+        self._session.mount('https://', self._adapter)
+
+        self._auth = HTTPBasicAuth(user, password)
+        self._session.headers.update({'Accept': 'application/json'})
+        #self._session.headers.update({'Authorization': self._auth})
+
+
+#    def get(self, url = "", headers = {'Accept': 'application/json'}):
+    def get(self, url = ""):
         start_dttm = ctime()
         start_tm = perf_counter()
 
@@ -35,10 +60,13 @@ class RestCall(Logger):
             if len(url) > 0 and url[0] != '/':
                 url=f'/{url}'
             u = urllib.parse.quote(f'{self._base_url}{url}',safe='/:&?=')
-            if self._auth == None:
-                resp = get(url= u, headers=headers)
-            else:
-                resp = get(url= u, auth = self._auth, headers=headers)
+            # if self._auth == None:
+            #     resp = get(url= u, headers={'Accept': 'application/json'})
+            # else:
+            #     resp = get(url= u, auth = self._auth, headers={'Accept': 'application/json'})
+
+            resp = self._session.get(u, timeout = (5, 15),auth=self._auth,headers={'Accept': 'application/json'})
+            resp.raise_for_status()
 
             # Save the duration, if enabled.
             if (self._track_time):
@@ -62,8 +90,10 @@ class RestCall(Logger):
         except exceptions.TooManyRedirects:
             #TODO Tell the user their URL was bad and try a different one
             self.error(f'TooManyRedirects while performing api request using: {url}')
+        except exceptions.HTTPError as e:
+            self.error(e)
         except exceptions.RequestException as e:
             # catastrophic error. bail.
-            self.error(f'General Request exception while performing api request using: {url}')
+            self.error(f'General Request exception while performing api request using: {u}')
 
         return 0, "{}"
