@@ -212,11 +212,12 @@ def format_table(writer, data, sheet_name,width=None):
         worksheet.set_column(col_num, col_num, w)
     return worksheet
 
-def find_in_list(search_for:str,list):
-    matches = []
-    
-    for match in list:
-        if "Hello" in match:
-            matches.append(match)
-
-    return matches
+def convert_LOC(total:int):
+    unit = ''
+    if 1000 <= total <= 1000000:
+        unit = 'KLoc'
+        total = int(total/1000)
+    elif total > 1000000:
+        unit = 'MLoc'
+        total = round(total/1000000,1)
+    return total,unit
