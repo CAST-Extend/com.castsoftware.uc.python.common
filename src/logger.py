@@ -4,7 +4,12 @@ from logging import LogRecord, DEBUG, INFO, ERROR, CRITICAL
 class Logger():
     loggers = set()
 
-    def __init__(self,name="general", level=INFO, format = '%(asctime)s [%(levelname)-s] %(message)s'):
+    def __init__(self,
+                 name:str="general", 
+                 level:int=INFO, 
+                 format:str = '%(asctime)s [%(levelname)-s] %(message)s',
+                 file_name:str=None,
+                 file_mode:str='a'):
 
         # Initial construct.
         self.format = format
@@ -22,6 +27,12 @@ class Logger():
             self.loggers.add(name)
             self.logger.setLevel(self.level)
             self.logger.addHandler(self.console_logger)
+            if not file_name is None:
+                fileHandler = logging.FileHandler(file_name,file_mode)
+                fileHandler.setFormatter(self.console_formatter)
+                self.logger.addHandler(fileHandler)
+        
+
 
     def set_level(self,level):
         self.logger.setLevel(level)

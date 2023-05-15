@@ -1,5 +1,5 @@
 from restAPI import RestCall
-from requests import codes
+from requests import codes, post
 from pandas import DataFrame
 from pandas import json_normalize
 from pandas import concat
@@ -62,7 +62,8 @@ class HLRestCall(RestCall):
             for id in json:
                 if id['name'].lower()==app_name.lower():
                     return id['id']
-            raise KeyError (f'Highlight application not found: {app_name}')
+            #raise KeyError (f'Highlight application not found: {app_name}')
+            return None
 
     def get_cloud_data(self,app_id):
         url = f'domains/{self._hl_instance}/applications/{app_id}'
@@ -125,6 +126,15 @@ class HLRestCall(RestCall):
                 lic=lic[['component','version','languages','release','origin','lastVersion','license','compliance']] 
 
         return lic,cves,len(third_party)
+    
+    def create_an_app(self, url, instance_id, app_name):
+        url = f'{url}/domains/{instance_id}/applications/'
+        payload =[{"name": app_name,"domains": [{"id": instance_id}]}]
+
+        resp = post(url, auth=self._auth, json=payload)        
+        #print(resp.status_code)
+
+        return resp.status_code
 
 def load_df_element(src,dst,name):
     if not (src.get(name) is None):
