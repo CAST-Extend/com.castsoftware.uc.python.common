@@ -1,4 +1,5 @@
 __pycache__/logger.cpython-38.pyc
 __pycache__/restAPI.cpython-38.pyc
 src/__pycache__/*
-
+**/.venv/**
+.venv/Lib/site-packages/bleach/__init__.py
