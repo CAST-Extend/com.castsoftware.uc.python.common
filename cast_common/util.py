@@ -2,7 +2,6 @@ from pandas import DataFrame,json_normalize,concat,ExcelWriter
 from os import mkdir
 from os.path import exists,abspath,join
 from subprocess import Popen,PIPE,STDOUT
-from logger import Logger
 import sys
 
 
