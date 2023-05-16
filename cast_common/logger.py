@@ -1,5 +1,5 @@
 import logging,sys
-from logging import LogRecord, DEBUG, INFO, ERROR, CRITICAL
+from logging import LogRecord, DEBUG, INFO, WARN, ERROR, DEBUG, CRITICAL
 
 class Logger():
     loggers = set()
