@@ -1,4 +1,4 @@
-from restAPI import RestCall
+from cast_common.restAPI import RestCall
 from requests import codes
 
 from pandas import DataFrame
@@ -70,16 +70,34 @@ class AipRestCall(RestCall):
         else:
             return None
 
+    def _get_snapshot(self,domain_id):
+        self.debug(f'retrieving latest snapshot information for {domain_id}')
+        (status,json) = self.get(f'{domain_id}/applications/3/snapshots')
+        return status,json
+
+
     def get_latest_snapshot(self,domain_id):
         self.debug(f'retrieving latest snapshot information for {domain_id}')
-        snapshot = {}
-        (status,json) = self.get(f'{domain_id}/applications/3/snapshots')
+        (status,json) = self._get_snapshot(domain_id)
         if status == codes.ok and len(json) > 0:
+            snapshot = {}
             snapshot['id'] = json[0]['href'].split('/')[-1]  
             snapshot['name'] = json[0]['name']
             snapshot['technology'] = json[0]['technologies']
             snapshot['module_href'] = json[0]['moduleSnapshots']['href']
             snapshot['result_href'] = json[0]['results']['href'] 
+        return snapshot 
+
+    def get_prev_snapshot(self,domain_id):
+        self.debug(f'retrieving latest snapshot information for {domain_id}')
+        (status,json) = self._get_snapshot(domain_id)
+        if status == codes.ok and len(json) > 1:
+            snapshot = {}
+            snapshot['id'] = json[1]['href'].split('/')[-1]  
+            snapshot['name'] = json[1]['name']
+            snapshot['technology'] = json[1]['technologies']
+            snapshot['module_href'] = json[1]['moduleSnapshots']['href']
+            snapshot['result_href'] = json[1]['results']['href'] 
         return snapshot 
 
     def get_grades_by_technology(self,domain_id,snapshot):
@@ -161,7 +179,8 @@ class AipRestCall(RestCall):
         url = f'{domain_id}/applications/3/snapshots/{snapshot_id}/violations?rule-pattern={rule_arg}&startRow={start_row}&nbRows={max_rows}'
         (status,json) = self.get(url)
         if status == codes.ok and len(json) > 0:
-            rslt_df = DataFrame(json)
+            rslt_df = json_normalize(json,meta=['component','diagnosis','remedialAction','rulePattern'])
+            #rslt_df = DataFrame(json)
         return rslt_df
 
 
