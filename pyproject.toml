@@ -2,16 +2,16 @@
 name='com.castsoftware.uc.python.common'
 description="A set of common classes and methods for use with python projects"
 
-version='1.0.2' #prod version
+version='1.0.6' #prod version
 
-dependencies = ['pandas','requests']
+dependencies = ['pandas','requests','XlsxWriter']
 
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: OS Independent",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.10.6"
 readme = "README.md"
 [project.urls]
 "Homepage" = "https://github.com/CAST-Extend/com.castsoftware.uc.python.common"
