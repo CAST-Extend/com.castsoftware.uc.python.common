@@ -1,4 +1,4 @@
-from restAPI import RestCall
+from cast_common.restAPI import RestCall
 from requests import codes, post
 from pandas import DataFrame
 from pandas import json_normalize
