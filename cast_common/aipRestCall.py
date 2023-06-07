@@ -164,6 +164,26 @@ class AipRestCall(RestCall):
 
         return rslt
 
+    # def get_rules(self,domain_id,snapshot_id,business_criteria,critical=True,non_critical=True,start_row=1,max_rows=10000):
+    #     rslt_df =  DataFrame()
+    #     critical_arg=non_critical_arg=''
+
+    #     if critical:
+    #        critical_arg=f'cc:{business_criteria}' 
+    #     if non_critical:
+    #        non_critical_arg=f'nc:{business_criteria}' 
+
+    #     rule_arg=critical_arg
+    #     if len(rule_arg) > 0:
+    #         rule_arg = rule_arg + ','
+    #     rule_arg=f'{rule_arg}{non_critical_arg}'
+
+    #     url = f'{domain_id}/applications/3/snapshots/{snapshot_id}/violations?rule-pattern={rule_arg}&startRow={start_row}&nbRows={max_rows}'
+    #     (status,json) = self.get(url)
+    #     if status == codes.ok and len(json) > 0:
+    #         rslt_df = DataFrame(json)
+    #     return rslt_df
+
     def get_rules(self,domain_id,snapshot_id,business_criteria,critical=True,non_critical=True,start_row=1,max_rows=10000):
         rslt_df =  DataFrame()
         critical_arg=non_critical_arg=''
@@ -184,7 +204,6 @@ class AipRestCall(RestCall):
             rslt_df = json_normalize(json,meta=['component','diagnosis','remedialAction','rulePattern'])
             #rslt_df = DataFrame(json)
         return rslt_df
-
 
     def get_action_plan(self,domain_id,snapshot_id):
         business_criteria = ['Robustness','Efficiency','Security','Transferability','Changeability']

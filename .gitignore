@@ -3,5 +3,6 @@
 **/.vscode/**
 **/build/**
 **/com.castsoftware.uc.python.common.egg-info/**
-pip_final.bat
 *.ipynb
+pip_final.bat
+
