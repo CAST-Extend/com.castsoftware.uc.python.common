@@ -7,8 +7,8 @@ from requests.exceptions import ConnectionError, ConnectTimeout
 
 #from requests.packages.urllib3.util.retry import Retry
 
-from logger import Logger
 from logging import INFO, error
+from cast_common.logger import Logger
 from pandas import DataFrame
 from time import perf_counter, ctime
 
@@ -97,3 +97,37 @@ class RestCall(Logger):
             self.error(f'General Request exception while performing api request using: {u}')
 
         return 0, "{}"
+    
+    def post(self, url = "",data = {}):
+
+        try:
+            if len(url) > 0 and url[0] != '/':
+                url=f'/{url}'
+            u = urllib.parse.quote(f'{self._base_url}{url}',safe='/:&?=')
+
+            resp = self._session.post(u,data=data,timeout = (5, 15),auth=self._auth,headers={'Accept': 'application/json'})
+            resp.raise_for_status()
+
+            if resp.status_code == codes.ok:
+                return resp.status_code, resp.json()
+            elif resp.status_code == codes.no_content:
+                return resp.status_code, {}
+            else:
+                return resp.status_code,""
+
+        except exceptions.ConnectionError:
+            self.error(f'Unable to connect to host {self._base_url}')
+        except exceptions.Timeout:
+            #TODO Maybe set up for a retry, or continue in a retry loop
+            self.error(f'Timeout while performing api request using: {url}')
+        except exceptions.TooManyRedirects:
+            #TODO Tell the user their URL was bad and try a different one
+            self.error(f'TooManyRedirects while performing api request using: {url}')
+        except exceptions.HTTPError as e:
+            self.error(e)
+        except exceptions.RequestException as e:
+            # catastrophic error. bail.
+            self.error(f'General Request exception while performing api request using: {u}')
+
+        return 0, "{}"
+
