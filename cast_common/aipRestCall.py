@@ -78,9 +78,9 @@ class AipRestCall(RestCall):
 
     def get_latest_snapshot(self,domain_id):
         self.debug(f'retrieving latest snapshot information for {domain_id}')
+        snapshot = {}
         (status,json) = self._get_snapshot(domain_id)
         if status == codes.ok and len(json) > 0:
-            snapshot = {}
             snapshot['id'] = json[0]['href'].split('/')[-1]  
             snapshot['name'] = json[0]['name']
             snapshot['technology'] = json[0]['technologies']
@@ -90,9 +90,9 @@ class AipRestCall(RestCall):
 
     def get_prev_snapshot(self,domain_id):
         self.debug(f'retrieving latest snapshot information for {domain_id}')
+        snapshot = {}
         (status,json) = self._get_snapshot(domain_id)
         if status == codes.ok and len(json) > 1:
-            snapshot = {}
             snapshot['id'] = json[1]['href'].split('/')[-1]  
             snapshot['name'] = json[1]['name']
             snapshot['technology'] = json[1]['technologies']
@@ -104,11 +104,13 @@ class AipRestCall(RestCall):
         self.debug(f'retrieving grades by technology for domain {domain_id} and snapshot {snapshot}')
         first_tech=True
         grade = DataFrame(columns=list(self._measures.values()))
+        snapshot_id=snapshot['id']
         for tech in snapshot['technology']:
             t={}
             a={}
             for key in self._measures: 
-                url = f'{domain_id}/applications/3/results?quality-indicators={key}&technologies={tech}'
+#                url = f'{domain_id}/applications/3/results?quality-indicators={key}&technologies={tech}'
+                url = f'{domain_id}/applications/3/snapshots/{snapshot_id}/results?quality-indicators={key}&technologies={tech}'
                 (status,json) = self.get(url)
                 if status == codes.ok and len(json) > 0:
                     try:
