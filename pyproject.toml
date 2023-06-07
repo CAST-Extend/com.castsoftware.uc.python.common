@@ -2,7 +2,7 @@
 name='com.castsoftware.uc.python.common'
 description="A set of common classes and methods for use with python projects"
 
-version='1.0.6' #prod version
+version='1.0.7' #prod version
 
 dependencies = ['pandas','requests','XlsxWriter']
 
