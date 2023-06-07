@@ -120,10 +120,15 @@ class HLRestCall(RestCall):
                     load_df_element(tp,lic_df,'lastVersion')
                     lic=concat([lic,lic_df],ignore_index=True)
 
-            if 'component' in cves.columns:
+            if not cves.empty and 'component' in cves.columns:
                 cves=cves[['component','version','languages','release','origin','lastVersion','cve', 'description', 'cweId', 'cweLabel', 'criticity', 'cpe']]
-            if 'component' in lic.columns:
+            else:
+                cves=None
+                
+            if not lic.empty and  'component' in lic.columns:
                 lic=lic[['component','version','languages','release','origin','lastVersion','license','compliance']] 
+            else:
+                lic=None
 
         return lic,cves,len(third_party)
     
