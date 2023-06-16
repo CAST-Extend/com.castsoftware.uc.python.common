@@ -86,6 +86,7 @@ class AipRestCall(RestCall):
             snapshot['technology'] = json[0]['technologies']
             snapshot['module_href'] = json[0]['moduleSnapshots']['href']
             snapshot['result_href'] = json[0]['results']['href'] 
+            snapshot['date'] = json[0]['annotation']['date']['isoDate']
         return snapshot 
 
     def get_prev_snapshot(self,domain_id):
@@ -97,8 +98,9 @@ class AipRestCall(RestCall):
             snapshot['name'] = json[1]['name']
             snapshot['technology'] = json[1]['technologies']
             snapshot['module_href'] = json[1]['moduleSnapshots']['href']
-            snapshot['result_href'] = json[1]['results']['href'] 
-        return snapshot 
+            snapshot['result_href'] = json[1]['results']['href']
+            snapshot['date'] = json[1]['annotation']['date']['isoDate'] 
+        return snapshot  
 
     def get_grades_by_technology(self,domain_id,snapshot):
         self.debug(f'retrieving grades by technology for domain {domain_id} and snapshot {snapshot}')
