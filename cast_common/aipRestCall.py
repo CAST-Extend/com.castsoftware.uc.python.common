@@ -30,12 +30,12 @@ class AipRestCall(RestCall):
 
     def get_domain(self, schema_name):
         self.debug(f'retrieving domain for {schema_name}')
-        schema_name = schema_name.replace('-','_')
+        schema_name = f'{schema_name}_central'.replace('-','_').lower()
         domain_id = None
         (status,json) = self.get()
         if status == codes.ok:
             try: 
-                domain_id = list(filter(lambda x:x["schema"].lower()==schema_name.lower(),json))[0]['name']
+                domain_id = list(filter(lambda x:x["schema"]==schema_name,json))[0]['name']
             except IndexError:
                 self.error(f'Domain not found for schema {schema_name}')
         if status == 0:
@@ -186,7 +186,7 @@ class AipRestCall(RestCall):
     #         rslt_df = DataFrame(json)
     #     return rslt_df
 
-    def get_rules(self,domain_id,snapshot_id,business_criteria,critical=True,non_critical=True,start_row=1,max_rows=10000):
+    def get_rules(self,domain_id,snapshot_id,business_criteria,critical=True,non_critical=True,start_row=1,max_rows=10000,return_raw=False):
         rslt_df =  DataFrame()
         critical_arg=non_critical_arg=''
 
@@ -203,8 +203,10 @@ class AipRestCall(RestCall):
         url = f'{domain_id}/applications/3/snapshots/{snapshot_id}/violations?rule-pattern={rule_arg}&startRow={start_row}&nbRows={max_rows}'
         (status,json) = self.get(url)
         if status == codes.ok and len(json) > 0:
-            rslt_df = json_normalize(json,meta=['component','diagnosis','remedialAction','rulePattern'])
-            #rslt_df = DataFrame(json)
+            if not return_raw:
+                rslt_df = json_normalize(json,meta=['component','diagnosis','remedialAction','rulePattern'])
+            else:
+                rslt_df = DataFrame(json)
         return rslt_df
 
     def get_action_plan(self,domain_id,snapshot_id):
