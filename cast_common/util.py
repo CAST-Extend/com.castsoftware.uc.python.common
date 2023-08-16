@@ -184,7 +184,7 @@ def format_table(writer, data, sheet_name,width=None,total_line=False):
 
     workbook = writer.book
     worksheet = writer.sheets[sheet_name]
-    rows = len(data)
+    rows = len(data)+1
     cols = len(data.columns)-1
 
     columns=[]
