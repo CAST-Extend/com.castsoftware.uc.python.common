@@ -31,8 +31,10 @@ class Logger():
                 fileHandler = logging.FileHandler(file_name,file_mode)
                 fileHandler.setFormatter(self.console_formatter)
                 self.logger.addHandler(fileHandler)
-        
 
+    @property    
+    def is_debug(self):
+        return self.logger.isEnabledFor(logging.DEBUG)
 
     def set_level(self,level):
         self.logger.setLevel(level)
