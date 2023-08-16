@@ -5,4 +5,4 @@
 **/com.castsoftware.uc.python.common.egg-info/**
 *.ipynb
 pip_final.bat
-
+test/**

@@ -11,7 +11,7 @@ class HLRestCall(RestCall):
     Class to handle HL REST API calls.
     """
     def __init__(self, hl_base_url, hl_user, hl_pswd, hl_instance, timer_on=False,log_level=INFO):
-        super().__init__(hl_base_url, hl_user, hl_pswd, timer_on,log_level)
+        super().__init__(base_url=hl_base_url,user=hl_user,password=hl_pswd,track_time=timer_on,log_level=log_level)
 
         self._hl_instance = hl_instance
         self._hl_data_retrieved = False

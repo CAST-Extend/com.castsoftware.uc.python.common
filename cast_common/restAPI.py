@@ -11,6 +11,7 @@ from logging import INFO, error
 from cast_common.logger import Logger
 from pandas import DataFrame
 from time import perf_counter, ctime
+from base64 import b64decode
 
 
 __author__ = "Nevin Kaplan"
@@ -25,7 +26,7 @@ class RestCall(Logger):
     _time_tracker_df  = DataFrame()
     _track_time = True
 
-    def __init__(self, base_url, user=None, password=None, track_time=False,log_level=INFO):
+    def __init__(self,*, base_url, user=None, password=None, basic_auth=None, track_time=False,log_level=INFO):
         super().__init__(level=log_level)
         if base_url[-1]=='/': 
             base_url=base_url[:-1]
@@ -40,19 +41,23 @@ class RestCall(Logger):
                     total = self._max_retries,
                     backoff_factor = 1,
                     status_forcelist = [408, 500, 502, 503, 504],
+#                    status_forcelist = [408],
                 )
         )
 
         self._session.mount('http://', self._adapter)
         self._session.mount('https://', self._adapter)
-
+        if basic_auth:
+            up = b64decode(bytes(basic_auth,encoding='utf8')+b'==')
+            (user,password)=up.decode().split(':')
         self._auth = HTTPBasicAuth(user, password)
+
         self._session.headers.update({'Accept': 'application/json'})
         #self._session.headers.update({'Authorization': self._auth})
 
 
 #    def get(self, url = "", headers = {'Accept': 'application/json'}):
-    def get(self, url = ""):
+    def get(self, url = "",header=None):
         start_dttm = ctime()
         start_tm = perf_counter()
 
@@ -65,7 +70,11 @@ class RestCall(Logger):
             # else:
             #     resp = get(url= u, auth = self._auth, headers={'Accept': 'application/json'})
 
-            resp = self._session.get(u, timeout = (5, 15),auth=self._auth,headers={'Accept': 'application/json'})
+            if header is None:
+                header={'Accept': 'application/json'}
+
+#            resp = self._session.get(u, timeout = (5, 15),auth=self._auth,headers={'Accept': 'application/json'})
+            resp = self._session.get(u, timeout = (5, 15),auth=self._auth,headers=header)
             resp.raise_for_status()
 
             # Save the duration, if enabled.
@@ -91,6 +100,8 @@ class RestCall(Logger):
             #TODO Tell the user their URL was bad and try a different one
             self.error(f'TooManyRedirects while performing api request using: {url}')
         except exceptions.HTTPError as e:
+            if resp.status_code == 401:
+                raise PermissionError(u)
             self.error(e)
         except exceptions.RequestException as e:
             # catastrophic error. bail.
