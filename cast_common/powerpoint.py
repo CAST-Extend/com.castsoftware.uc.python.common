@@ -44,7 +44,9 @@ class PowerPoint():
 
         for slide in slides:
             for shape in slide.shapes:
-                if shape.name == name:
+                parts = shape.name.split(':')
+                shape_name = parts[0]
+                if shape_name == name:
                     return shape
         return None
 
@@ -167,6 +169,17 @@ class PowerPoint():
                      background=None, forground=None,neg_num_bkg:list=None, 
                      has_header=True,max_rows=-1):
         table_shape = self.get_shape_by_name(name)
+        if table_shape is None:
+            raise ValueError(f'Table not found in template: {name}')
+        
+        #a notation of :## at the end of the table name indicates the max row count
+        splt = table_shape.name.split(':')
+        if len(splt) > 1:
+            max_rows=int(splt[1])
+            if max_rows == 0:
+                max_rows=-1
+                self.log.warning(f'Invalid max rows notation: {table_shape.name}')
+
         if table_shape != None and table_shape.has_table:
             table=table_shape.table
 
@@ -288,7 +301,7 @@ class PowerPoint():
                     run = self._merge_runs(paragraph)
                     run.font.color.rgb=RGBColor(int(rgb[0]), int(rgb [1]), int(rgb[2]))
                 except IndexError:
-                    self.warning('index error in update_table while setting background color')
+                    self.log.warning('index error in update_table while setting background color')
 
     def change_paragraph_color(self,paragraph,rgb):
         run = self._merge_runs(paragraph)
