@@ -9,7 +9,8 @@ class Logger():
                  level:int=INFO, 
                  format:str = '%(asctime)s [%(levelname)-s] %(message)s',
                  file_name:str=None,
-                 file_mode:str='a'):
+                 file_mode:str='a',
+                 console_output:bool=True):
 
         # Initial construct.
         self.format = format
@@ -18,15 +19,17 @@ class Logger():
 
         # Logger configuration.
         self.console_formatter = logging.Formatter(self.format)
-        self.console_logger = logging.StreamHandler(sys.stdout)
-        self.console_logger.setFormatter(self.console_formatter)
+        if console_output:
+            self.console_logger = logging.StreamHandler(sys.stdout)
+            self.console_logger.setFormatter(self.console_formatter)
 
         # Complete logging config.
         self.logger = logging.getLogger(name)
         if name not in self.loggers:
             self.loggers.add(name)
             self.logger.setLevel(self.level)
-            self.logger.addHandler(self.console_logger)
+            if console_output:
+                self.logger.addHandler(self.console_logger)
             if not file_name is None:
                 fileHandler = logging.FileHandler(file_name,file_mode)
                 fileHandler.setFormatter(self.console_formatter)
