@@ -153,18 +153,17 @@ class Highlight(RestCall):
             self.error(f'{app_name} has no Metric Data')
             raise ke
 
-    def _get_third_party_data(self,app_name:str=None,max_rows=0):
+    def _get_third_party_data(self,app_name:str=None):
         self.debug('Retrieving third party HL data')
 
-        if app_name is not None and app_name not in Highlight._apps['name'].to_list():
+        if app_name not in Highlight._apps['name'].to_list():
             raise ValueError(f'{app_name} is not a selected application')
 
-        if app_name is None:
+        if str is None:
             df = Highlight._apps
         else:
             df = Highlight._apps[Highlight._apps['name']==app_name]
 
-        cnt = 0
         for idx,app in df.iterrows():
             app_name = app['name']
             if app_name not in Highlight._third_party:
@@ -172,14 +171,7 @@ class Highlight(RestCall):
                     if not app_name in Highlight._third_party:
                         self.info(f'Loading Highlight component data for {app_name}')
                         data = self._get_third_party_from_rest(app_name)
-                        if not type(data) is dict:
-                            self.log.debug(f'No third party data returned for {app_name}')
-                        else: 
-                            data = data['thirdParties']
-                            cnt+=1
                         Highlight._third_party[app_name]=data
-                        if max_rows > 0 and cnt == max_rows:
-                            break
                 except KeyError as ke:
                     self.warning(str(ke))
                     pass
@@ -209,11 +201,7 @@ class Highlight(RestCall):
 #            return DataFrame(json)
             return json
         else:
-            # no data returned but all is ok 
-            if status >= 200 and status < 300:
-                return json
-            else:
-                raise KeyError (f'Server returned a {status} while accessing {url}')
+            raise KeyError (f'Server returned a {status} while accessing {url}')
 
     def _get_applications(self):
         return DataFrame(self._get(f'domains/{Highlight._instance_id}/applications/', {'Accept': 'application/vnd.castsoftware.api.basic+json'} ))
@@ -316,8 +304,6 @@ class Highlight(RestCall):
 
         else:
             raise KeyError (f'Server returned a {status} while accessing {url}')
-
-
 
     """ **************************************************************************************************************
                                             Third Party Component Data 
@@ -509,4 +495,13 @@ class Highlight(RestCall):
     def get_software_oss_obsolescence_score(self,app_name:str) -> float:
         metrics = self._get_metrics(app_name)
         return float(metrics['openSourceObsolescence'])*100
+
+
+
+
+
+def load_df_element(src,dst,name):
+    if not (src.get(name) is None):
+        dst[name]=src[name] 
+
 
