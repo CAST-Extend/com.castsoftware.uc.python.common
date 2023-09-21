@@ -41,7 +41,6 @@ class RestCall(Logger):
                     total = self._max_retries,
                     backoff_factor = 1,
                     status_forcelist = [408, 500, 502, 503, 504],
-#                    status_forcelist = [408],
                 )
         )
 

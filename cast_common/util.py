@@ -1,5 +1,5 @@
 from pandas import DataFrame,json_normalize,concat,ExcelWriter
-from os import mkdir
+from os import makedirs
 from os.path import exists,abspath,join
 from subprocess import Popen,PIPE,STDOUT
 from pandas.api.types import is_numeric_dtype
@@ -156,7 +156,7 @@ def resource_path(relative_path):
 
 def create_folder(folder):
     if not exists(folder):
-        mkdir(folder)
+        makedirs(folder)
 
 def run_process(args,wait=True,output=True) -> int:
 #    process = Popen(args, stdout=PIPE, stderr=PIPE)
