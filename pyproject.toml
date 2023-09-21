@@ -2,9 +2,9 @@
 name='com.castsoftware.uc.python.common'
 description="A set of common classes and methods for use with python projects"
 
-version='1.0.19' #prod version
+version='1.0.20' #prod version
 
-dependencies = ['pandas','requests','XlsxWriter']
+dependencies = ['pandas','requests','XlsxWriter','tqdm']
 
 classifiers = [
     "Programming Language :: Python :: 3",
