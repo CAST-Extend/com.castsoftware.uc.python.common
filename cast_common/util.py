@@ -72,7 +72,7 @@ def each_risk_factor(ppt, aip_data, app_id, app_no):
     ppt.remove_empty_placeholders()
     return risk_grades
 
-def format_table(writer, data, sheet_name,width=None):
+def format_table(writer, data, sheet_name,width=None,total_line:bool=False):
     
     data.to_excel(writer, index=False, sheet_name=sheet_name, startrow=1,header=False)
 
@@ -81,15 +81,28 @@ def format_table(writer, data, sheet_name,width=None):
     rows = len(data)
     cols = len(data.columns)-1
     columns=[]
+    first=True
     for col_num, value in enumerate(data.columns.values):
-        columns.append({'header': value})
+        json = {'header': value}
+        if first:
+            first=False
+            if total_line:
+                json['total_string']='Totals'
+        else: 
+            if is_numeric_dtype(data[value]) and data[value].dtype != 'bool':
+                if total_line:
+                    json['total_function']='sum'
+
+        columns.append(json)
 
     table_options={
                 'columns':columns,
                 'header_row':True,
                 'autofilter':True,
-                'banded_rows':True
+                'banded_rows':True,
+                'total_row':total_line
                 }
+
     worksheet.add_table(0, 0, rows, cols,table_options)
     
     header_format = workbook.add_format({'text_wrap':True,
@@ -98,12 +111,21 @@ def format_table(writer, data, sheet_name,width=None):
     col_width = 10
     if width == None:
         width = []
-        for i in range(1,len(data.columns)+1):
-           width.append(col_width)
+        for col in data.columns:
+            x = data[col].astype(str).str.len().max()
+            if x < 15: x = 10
+            if x > 100: x = 150
+            width.append(x)
+
+        # for i in range(1,len(data.columns)+1):
+        #    width.append(col_width)
+
+
     for col_num, value in enumerate(data.columns.values):
         worksheet.write(0, col_num, value, header_format)
         w=width[col_num]
         worksheet.set_column(col_num, col_num, w)
+
     return worksheet
 
 def find_nth(string, substring, n):
