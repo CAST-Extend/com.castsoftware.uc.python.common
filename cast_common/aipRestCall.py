@@ -1,11 +1,15 @@
-from cast_common.restAPI import RestCall
+#from cast_common.restAPI import RestCall
+from cast_common.mri import MRI
 from requests import codes
 
-from pandas import DataFrame
+from pandas import DataFrame,concat
 from pandas import merge
 from pandas import json_normalize
 
-class AipRestCall(RestCall):
+from tqdm import tqdm
+
+
+class AipRestCall(MRI):
     _measures = {
         '60017':'TQI',
         '60013':'Robustness',
@@ -28,22 +32,32 @@ class AipRestCall(RestCall):
         '67013':' per kLoC'
     }
 
-    def get_domain(self, schema_name):
-        self.debug(f'retrieving domain for {schema_name}')
+    _domain_list=None
+    def get_domain(self, schema_name) -> str:
+        self._log.debug(f'retrieving domain for {schema_name}')
         schema_name = f'{schema_name}_central'.replace('-','_').lower()
-        domain_id = None
-        (status,json) = self.get()
-        if status == codes.ok:
-            try: 
-                domain_id = list(filter(lambda x:x["schema"]==schema_name,json))[0]['name']
-            except IndexError:
-                self.error(f'Domain not found for schema {schema_name}')
-        if status == 0:
-            domain_id = -1        
+
+        # only need to make the rest call once since 
+        # when the rest call is made it retrieves a 
+        # complete list of domain id
+        if MRI._domain_list is None:
+            (status,json) = self.get()
+            if status == codes.ok:
+                MRI._domain_list = json
+            elif status == 0:
+                domain_id = -1        
+            else:
+                raise ValueError(f'Domain id not found for {schema_name}')
+            
+        try: 
+            domain_id = list(filter(lambda x:x["schema"]==schema_name,MRI._domain_list))[0]['name']
+        except IndexError:
+            self.error(f'Domain not found for schema {schema_name}')
+
         return domain_id
 
     def get_quality_indicators(self,domain_id,snapshot_id, key):
-        self.debug(f'retrieving quality indicators information for {domain_id}/{key}')
+        self._log.debug(f'retrieving quality indicators information for {domain_id}/{key}')
         url = f'{domain_id}/quality-indicators/{key}/snapshots/{snapshot_id}'
 
         (status,json) = self.get(url)
@@ -53,7 +67,7 @@ class AipRestCall(RestCall):
             return None
 
     def get_violation_ratio(self,domain_id, key):
-        self.debug(f'retrieving violation ratio information for {domain_id}/{key}')
+        self._log.debug(f'retrieving violation ratio information for {domain_id}/{key}')
         url = f'{domain_id}/applications/3/results?quality-indicators=cc:{key},nc:{key}&select=violationRatio'
         (status,json) = self.get(url)
         if status == codes.ok and len(json) > 0:
@@ -62,7 +76,7 @@ class AipRestCall(RestCall):
             return None
 
     def get_grade(self,domain_id, key):
-        self.debug(f'retrieving grade information for {domain_id}/{key}')
+        self._log.debug(f'retrieving grade information for {domain_id}/{key}')
         url = f'{domain_id}/applications/3/results?quality-indicators={key}'
         (status,json) = self.get(url)
         if status == codes.ok and len(json) > 0:
@@ -71,43 +85,47 @@ class AipRestCall(RestCall):
             return None
 
     def _get_snapshot(self,domain_id):
-        self.debug(f'retrieving latest snapshot information for {domain_id}')
+        self._log.debug(f'retrieving latest snapshot information for {domain_id}')
         (status,json) = self.get(f'{domain_id}/applications/3/snapshots')
         return status,json
 
 
     def get_latest_snapshot(self,domain_id):
-        self.debug(f'retrieving latest snapshot information for {domain_id}')
+        self._log.debug(f'retrieving latest snapshot information for {domain_id}')
         snapshot = {}
         (status,json) = self._get_snapshot(domain_id)
         if status == codes.ok and len(json) > 0:
-            snapshot['id'] = json[0]['href'].split('/')[-1]  
-            snapshot['name'] = json[0]['name']
-            snapshot['technology'] = json[0]['technologies']
-            snapshot['module_href'] = json[0]['moduleSnapshots']['href']
-            snapshot['result_href'] = json[0]['results']['href'] 
-            snapshot['date'] = json[0]['annotation']['date']['isoDate']
+            snapshot = self._capture_snapshot(json)
         return snapshot 
 
     def get_prev_snapshot(self,domain_id):
-        self.debug(f'retrieving latest snapshot information for {domain_id}')
+        self._log.debug(f'retrieving latest snapshot information for {domain_id}')
         snapshot = {}
         (status,json) = self._get_snapshot(domain_id)
         if status == codes.ok and len(json) > 1:
-            snapshot['id'] = json[1]['href'].split('/')[-1]  
-            snapshot['name'] = json[1]['name']
-            snapshot['technology'] = json[1]['technologies']
-            snapshot['module_href'] = json[1]['moduleSnapshots']['href']
-            snapshot['result_href'] = json[1]['results']['href']
-            snapshot['date'] = json[1]['annotation']['date']['isoDate'] 
+            snapshot = self._capture_snapshot(json)
         return snapshot  
 
+    def _capture_snapshot(self,json:dict) -> dict:
+        snapshot = {}
+        snapshot['id'] = json[0]['href'].split('/')[-1]  
+        snapshot['name'] = json[0]['name']
+        snapshot['technology'] = json[0]['technologies']
+        snapshot['module_href'] = json[0]['moduleSnapshots']['href']
+        snapshot['result_href'] = json[0]['results']['href']
+        snapshot['date'] = json[0]['annotation']['date']['isoDate'] 
+
+        snapshot['tech-key'] = json[0]['technologies']
+        snapshot['technology'] = [sub.replace('.NET','DotNet') for sub in snapshot['technology']]
+
+        return snapshot
+
     def get_grades_by_technology(self,domain_id,snapshot):
-        self.debug(f'retrieving grades by technology for domain {domain_id} and snapshot {snapshot}')
+        self._log.debug(f'retrieving grades by technology for domain {domain_id} and snapshot {snapshot}')
         first_tech=True
         grade = DataFrame(columns=list(self._measures.values()))
         snapshot_id=snapshot['id']
-        for tech in snapshot['technology']:
+        for tech in snapshot['tech-key']:
             t={}
             a={}
             for key in self._measures: 
@@ -118,11 +136,19 @@ class AipRestCall(RestCall):
                     try:
                         t[self._measures[key]]=json[0]['applicationResults'][0]['technologyResults'][0]['result']['grade']
                     except IndexError:
-                        self.warning(f'{domain_id} no grade available for {key} {tech} setting it to 4')
+                        self._log.warning(f'{domain_id} no grade available for {key} {tech} setting it to 4')
                         t[self._measures[key]]=4
 
                     if first_tech==True:
-                        a[self._measures[key]]=json[0]['applicationResults'][0]['result']['grade']
+                        typ='grade'
+                        if self._measures[key].startswith('ISO'):
+                            typ = 'score'
+
+                        a[self._measures[key]]=json[0]['applicationResults'][0]['result'][typ]
+
+                        if typ == 'score':
+                            a[self._measures[key]] = a[self._measures[key]] * 100
+
                 else:
                     self.error (f'Error retrieving technology information:  {url}')
             if first_tech==True:
@@ -133,10 +159,10 @@ class AipRestCall(RestCall):
         return grade
 
     def get_sizing_by_technology(self,domain_id,snapshot,sizing):
-        self.debug(f'retrieving sizing by technology for domain {domain_id} and snapshot {snapshot}')
+        self._log.debug(f'retrieving sizing by technology for domain {domain_id} and snapshot {snapshot}')
         first_tech=True
         size_df = DataFrame(columns=list(sizing.values()))
-        for tech in snapshot['technology']:
+        for tech in snapshot['tech-key']:
             t={}
             a={}
             for key in sizing: 
@@ -148,7 +174,7 @@ class AipRestCall(RestCall):
                         if first_tech==True:
                             a[sizing[key]]=json[0]['applicationResults'][0]['result']['value']
                     except IndexError:
-                        self.debug(f'{domain_id} no grade available for {key} {tech}')
+                        self._log.debug(f'{domain_id} no grade available for {key} {tech}')
             if first_tech==True:
                 size_df.loc['All'] = a
             size_df.loc[tech] = t
@@ -156,7 +182,7 @@ class AipRestCall(RestCall):
         return size_df
 
     def get_distribution_sizing(self, domain_id, metric_id):
-        self.debug(f'retrieving distribution sizing for domain {domain_id} and metric id {metric_id}')
+        self._log.debug(f'retrieving distribution sizing for domain {domain_id} and metric id {metric_id}')
         rslt = DataFrame(columns=['name','value'])
         (status,json) = self.get(f'{domain_id}/applications/3/results?metrics={metric_id}&select=categories')
         if status == codes.ok and len(json) > 0:
@@ -189,6 +215,7 @@ class AipRestCall(RestCall):
                 rslt_df = DataFrame(json)
         return rslt_df
 
+    _action_plan = {}
     def get_action_plan(self,domain_id,snapshot_id):
         business_criteria = ['Robustness','Efficiency','Security','Transferability','Changeability']
     
@@ -196,58 +223,82 @@ class AipRestCall(RestCall):
         tech_criteria = ''
         rslt_df =  DataFrame()
         ap_summary_df =  DataFrame()
-        url = f'{domain_id}/applications/3/snapshots/{snapshot_id}/action-plan/issues?startRow=1&nbRows=100000'
-        (status,json) = self.get(url)
-        if status == codes.ok and len(json) > 0:
-            rslt_df = DataFrame(json)
-            rule_pattern = json_normalize(rslt_df['rulePattern']).add_prefix('rule.')
-            rule_pattern['rule.href'] = rule_pattern['rule.href'].str.split('/').str[-1]
-            rule_pattern = rule_pattern.rename(columns={"rule.href":"rule.id"})
+        if not domain_id in AipRestCall._action_plan.keys():
+            url = f'{domain_id}/applications/3/snapshots/{snapshot_id}/action-plan/issues?startRow=1&nbRows=100000'
+            (status,json) = self.get(url)
+            if status == codes.ok and len(json) > 0:
+                rslt_df = DataFrame(json)
+                rule_pattern = json_normalize(rslt_df['rulePattern']).add_prefix('rule.')
+                rule_pattern['rule.href'] = rule_pattern['rule.href'].str.split('/').str[-1]
+                rule_pattern = rule_pattern.rename(columns={"rule.href":"rule.id"})
 
-            component = json_normalize(rslt_df['component']).add_prefix('component.') 
-            component.drop(columns=component.columns.difference(['component.name','component.shortName']),axis=1,inplace=True)
+                component = json_normalize(rslt_df['component']).add_prefix('component.') 
+                remediation = json_normalize(rslt_df['remedialAction']) 
+                rslt_df = rule_pattern.join([component,remediation])                                                  
 
-            remediation = json_normalize(rslt_df['remedialAction']) 
-            rslt_df = rule_pattern.join([component,remediation])                                                  
+                rslt_df.insert(4,'tech_criteria','')
+                rslt_df.insert(4,'Business Criteria','')
+                rslt_df.insert(4,'component.tech','')
 
-            rslt_df.insert(3,'Business Criteria','')
-            rslt_df.insert(3,'tech_criteria','')
+                save_rule_id = ''
+                for key, value in tqdm(rslt_df.iterrows(),total=len(rslt_df),desc='Business Criteria'):
+                    if value['tag'] != 'low':
+                        url = value['component.treeNodes.href']
+                        (status,json) = self.get(url)
+                        if status == codes.ok and len(json) > 0:
+                            url = json[0]['ancestors']['href']
+                            (status,json) = self.get(url)
+                            if status == codes.ok and len(json) > 0:
+                                for item in json:
+                                    cmpnt = item['component']
+                                    typ = cmpnt['type']['name']
+                                    if typ == 'APM_MODULE':
+                                        rslt_df.at[key,'component.tech']=cmpnt['shortName']
+                                        break
+                                pass
 
-            save_rule_id = ''
-            for key, value in rslt_df.iterrows():
-                rule_id=value['rule.id']
-                if save_rule_id != rule_id:
-                    save_rule_id = rule_id
-                    url = f'{domain_id}/quality-indicators/{rule_id}/snapshots/{snapshot_id}'
-                    (status,json) = self.get(url)
-                    if status == codes.ok and len(json) > 0:
-                        catagory = ''
-                        tech_criteria = ''
-                        for g1 in json['gradeAggregators']:
-                            tech_criteria = g1['name']
-                            for g2 in g1['gradeAggregators']:
-                                if g2['name'] in business_criteria:
-                                    catagory = catagory + g2['name'] + ', '
+                    rule_id=value['rule.id']
+                    if save_rule_id != rule_id:
+                        save_rule_id = rule_id
+                        url = f'{domain_id}/quality-indicators/{rule_id}/snapshots/{snapshot_id}'
+                        (status,json) = self.get(url)
+                        if status == codes.ok and len(json) > 0:
+                            catagory = ''
+                            tech_criteria = ''
+                            for g1 in json['gradeAggregators']:
+                                tech_criteria = g1['name']
+                                for g2 in g1['gradeAggregators']:
+                                    if g2['name'] in business_criteria:
+                                        catagory = catagory + g2['name'] + ', '
+                    
+                    rslt_df.loc[key,'tech_criteria']=tech_criteria
+                    rslt_df.loc[key,'Business Criteria']=catagory[:-2]
+
+                rslt_df = rslt_df.drop(columns=[x for x in rslt_df.columns if x.endswith('.href') or '.treeNodes.' in x])
+
+                rslt_df = rslt_df.sort_values(by=['rule.id'])
+                ap_summary_df = rslt_df.groupby(['rule.name']).count()
+                business = DataFrame(rslt_df,columns=['rule.name','tech_criteria','Business Criteria','tag','comment']).drop_duplicates()
+                ap_summary_df.drop(columns=ap_summary_df.columns.difference(['rule.name','component.name']),axis=1,inplace=True)
+                ap_summary_df = merge(ap_summary_df,business, on='rule.name')
+                ap_summary_df = ap_summary_df[['rule.name','Business Criteria','component.name','comment','tag','tech_criteria']]
+                ap_summary_df = ap_summary_df.rename(columns={'component.name':'No. of Actions',
+                                                            'rule.name':'Quality Rule',
+                                                            'tech_criteria':'Technical Criteria'
+                                                            })
+
+                rslt_df = rslt_df.rename(columns={'rule.name':'Rule Name',
+                                                'comment':'Action Plan Priority',
+                                                'component.name':'Object Name Location',
+                                                'component.tech':'Technology',
+                                                "rule.id":'Rule Id'})
+                rslt_df = rslt_df[['Action Plan Priority','Rule Name','Object Name Location','Technology','Rule Id']]
                 
-                rslt_df.loc[key,'tech_criteria']=tech_criteria
-                rslt_df.loc[key,'Business Criteria']=catagory[:-2]
+                AipRestCall._action_plan[domain_id]={}
+                AipRestCall._action_plan[domain_id]['summary']=ap_summary_df
+                AipRestCall._action_plan[domain_id]['detail']=rslt_df
 
-            rslt_df = rslt_df.sort_values(by=['rule.id'])
-            ap_summary_df = rslt_df.groupby(['rule.name']).count()
-            business = DataFrame(rslt_df,columns=['rule.name','tech_criteria','Business Criteria','tag','comment']).drop_duplicates()
-            ap_summary_df.drop(columns=ap_summary_df.columns.difference(['rule.name','component.name']),axis=1,inplace=True)
-            ap_summary_df = merge(ap_summary_df,business, on='rule.name')
-            ap_summary_df = ap_summary_df[['rule.name','Business Criteria','component.name','comment','tag','tech_criteria']]
-            ap_summary_df = ap_summary_df.rename(columns={'component.name':'No. of Actions',
-                                                          'rule.name':'Quality Rule',
-                                                          'tech_criteria':'Technical Criteria'
-                                                          })
-
-            rslt_df = rslt_df.rename(columns={'rule.name':'Rule Name',
-                                              'comment':'Action Plan Priority',
-                                              'component.name':'Object Name Location'})
-            rslt_df = rslt_df[['Action Plan Priority','Rule Name','Object Name Location','rule.id']]
-        return (rslt_df, ap_summary_df)
+        return (AipRestCall._action_plan[domain_id]['detail'], AipRestCall._action_plan[domain_id]['summary'])
 
     def getLOC(self,domain_id):
         loc = 0
