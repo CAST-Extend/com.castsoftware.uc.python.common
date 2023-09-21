@@ -15,6 +15,7 @@ from pandas import DataFrame
 class PowerPoint():
 
     log = None
+    ppt = None
 
     def __init__(self,template:str,output:str,log_level=INFO) -> None:
 
@@ -29,6 +30,7 @@ class PowerPoint():
         self.log.info(f'Generating deck {self._output} from {self._template_name}')
 
         self._prs = Presentation(self._template_name)
+        PowerPoint.ppt = self
 
     def save(self):
         self._prs.save(self._output)
@@ -167,7 +169,7 @@ class PowerPoint():
     *********************************************************************************************************** """
     def update_table(self, name, df:DataFrame, include_index=True, 
                      background=None, forground=None,neg_num_bkg:list=None, 
-                     has_header=True,max_rows=-1):
+                     header_rows=1,max_rows=-1):
         table_shape = self.get_shape_by_name(name)
         if table_shape is None:
             raise ValueError(f'Table not found in template: {name}')
@@ -190,14 +192,16 @@ class PowerPoint():
             rows, cols = df.shape
 
             trows = len(table._tbl.tr_lst)
-            if not has_header:
-                trows=trows+1
+            trows=trows+header_rows
             drows = len(df.index)
             if max_rows > 0:
                 drows = min(rows,max_rows)
             
-            if trows-1 < drows:
-                nrc = drows-trows+1
+            tbl_row_cnt = header_rows+len(df)
+            if trows < tbl_row_cnt:
+                existing_rows = len(table._tbl.tr_lst)
+                nrc = tbl_row_cnt-existing_rows
+                #nrc = drows-trows+header_rows
                 for r in range(nrc):
                     self.add_row(table)
 
@@ -206,10 +210,10 @@ class PowerPoint():
             if include_index:
                 for col_index, col_name in enumerate(df.index):
                     try:
-                        if has_header:
-                            cell = table.cell(col_index+1,0)
-                        else:
-                            cell = table.cell(col_index,0)
+                        # if has_header:
+                        #     cell = table.cell(col_index+1,0)
+                        # else:
+                        cell = table.cell(col_index+header_rows,0)
                         text = str(col_name)
                         run = self._merge_runs(cell.text_frame.paragraphs[0])
                         run.text = text
@@ -222,10 +226,10 @@ class PowerPoint():
                 cols = cols-1
 
             if background:
-                self.set_table_bgcolor(table,df[background],rows,cols,has_header)
+                self.set_table_bgcolor(table,df[background],rows,cols,header_rows)
             if forground:
                 try:
-                    self.set_table_font_color(table,df[forground],rows,cols,has_header)
+                    self.set_table_font_color(table,df[forground],rows,cols,header_rows)
                 except (KeyError):
                     self.log.warning(f'error setting forground for {name}')
 
@@ -240,10 +244,10 @@ class PowerPoint():
                         tbl_col=col
 
                     try:
-                        if has_header:
-                            cell = table.cell(row+1,tbl_col)
-                        else:
-                            cell = table.cell(row,tbl_col)
+                        # if has_header:
+                        #     cell = table.cell(row+1,tbl_col)
+                        # else:
+                        cell = table.cell(row+header_rows,tbl_col)
 
                         run = self._merge_runs(cell.text_frame.paragraphs[0])
                         run.text = text
@@ -273,29 +277,29 @@ class PowerPoint():
                     except IndexError:
                         self.log.debug(f'index error in update_table ({name}) while setting values')
     
-    def set_table_bgcolor(self,table,colors,rows,cols,has_header):
+    def set_table_bgcolor(self,table,colors,rows,cols,header_rows):
         for row in range(rows):
             rgb = colors.iloc[row].split(",")
             for col in range(cols):
                 try:
-                    if has_header:
-                        cell = table.cell(row+1,col)
-                    else:
-                        cell = table.cell(row,col)
+                    # if has_header:
+                    #     cell = table.cell(row+1,col)
+                    # else:
+                    cell = table.cell(row+header_rows,col)
                     cell.fill.solid()
                     cell.fill.fore_color.rgb = RGBColor(int(rgb[0]), int(rgb [1]), int(rgb[2]))
                 except IndexError:
-                    self.warning('index error in update_table while setting background color')
+                    self.log.warning('index error in update_table while setting background color')
     
-    def set_table_font_color(self,table,colors,rows,cols,has_header):
+    def set_table_font_color(self,table,colors,rows,cols,header_rows):
         for row in range(rows):
             rgb = colors.iloc[row].split(",")
             for col in range(cols):
                 try:
-                    if has_header:
-                        cell = table.cell(row+1,col)
-                    else:
-                        cell = table.cell(row,col)
+                    # if has_header:
+                    #     cell = table.cell(row+1,col)
+                    # else:
+                    cell = table.cell(row+header_rows,col)
 
                     paragraph = cell.text_frame.paragraphs[0]
                     run = self._merge_runs(paragraph)
