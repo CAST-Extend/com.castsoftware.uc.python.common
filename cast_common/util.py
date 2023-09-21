@@ -200,48 +200,6 @@ def check_process(process:Popen,output=True):
     return process.returncode,ret
     
 
-def format_table(writer, data, sheet_name,width=None,total_line=False):
-    
-    data.to_excel(writer, index=False, sheet_name=sheet_name, startrow=1,header=False)
-
-    workbook = writer.book
-    worksheet = writer.sheets[sheet_name]
-    rows = len(data)+1
-    cols = len(data.columns)-1
-
-    columns=[]
-    first=True
-    for col_num, value in enumerate(data.columns.values):
-        json = {'header': value}
-        if first:
-            first=False
-            if total_line:
-                json['total_string']='Totals'
-        else: 
-            if is_numeric_dtype(data[value]) and data[value].dtype != 'bool':
-                if total_line:
-                    json['total_function']='sum'
-
-        columns.append(json)
-
-    table_options={
-                'total_row':total_line,
-                'columns':columns,
-                'header_row':True,
-                'autofilter':True,
-                'banded_rows':True
-                }
-    worksheet.add_table(0, 0, rows, cols,table_options)
-
-    col_width = 10
-    if width == None:
-        width = []
-        for i in range(1,len(data.columns)+1):
-           width.append(col_width)
-
-    return worksheet
-
-
 def convert_LOC(total:int):
     unit = ''
     if 1000 <= total <= 1000000:
