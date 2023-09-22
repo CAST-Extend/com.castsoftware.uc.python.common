@@ -81,9 +81,18 @@ def format_table(writer, data, sheet_name,width=None,total_line:bool=False):
     rows = len(data)
     cols = len(data.columns)-1
     columns=[]
+
+    # Add a custom number format with commas to the workbook
+    comma_format = workbook.add_format({'num_format': '#,##0'})
+
     first=True
     for col_num, value in enumerate(data.columns.values):
         json = {'header': value}
+        
+        # Check if the column is numeric and not boolean
+        if is_numeric_dtype(data[value]) and data[value].dtype != 'bool':
+            json['format'] = comma_format
+
         if first:
             first=False
             if total_line:
@@ -108,7 +117,6 @@ def format_table(writer, data, sheet_name,width=None,total_line:bool=False):
     header_format = workbook.add_format({'text_wrap':True,
                                         'align': 'center'})
 
-    col_width = 10
     if width == None:
         width = []
         for col in data.columns:
@@ -124,8 +132,8 @@ def format_table(writer, data, sheet_name,width=None,total_line:bool=False):
     for col_num, value in enumerate(data.columns.values):
         worksheet.write(0, col_num, value, header_format)
         w=width[col_num]
-        worksheet.set_column(col_num, col_num, w)
-
+        worksheet.set_column(col_num, col_num, w, comma_format if is_numeric_dtype(data[value]) and data[value].dtype != 'bool' else None)
+        
     return worksheet
 
 def find_nth(string, substring, n):
