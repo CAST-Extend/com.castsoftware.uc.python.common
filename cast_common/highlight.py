@@ -140,7 +140,7 @@ class Highlight(RestCall):
                     self.error(str(ex))
         pass
 
-    def _get_metrics(self,app_name:str):
+    def _get_metrics(self,app_name:str) -> dict:
         try:
             if app_name not in Highlight._apps['name'].to_list():
                 raise ValueError(f'{app_name} is not a selected application')
@@ -150,8 +150,8 @@ class Highlight(RestCall):
             metrics = data['metrics'][0]
             return metrics
         except KeyError as ke:
-            self.error(f'{app_name} has no Metric Data')
-            raise ke
+            self.warning(f'{app_name} has no Metric Data')
+            return {}
 
     def _get_third_party_data(self,app_name:str=None):
         self.debug('Retrieving third party HL data')
@@ -409,6 +409,24 @@ class Highlight(RestCall):
             return None
 
     """ **************************************************************************************************************
+                                            Cloud Ready Data 
+    ************************************************************************************************************** """
+    def get_green_detail(self,app_name:str)->DataFrame:
+        """Highlight green impact data
+
+        Args:
+            app_name (str): name of the application
+
+        Returns:
+            DataFrame: flattened version of the Highlight cloud ready data
+        """
+        try:
+            return json_normalize(self._get_metrics(app_name)['greenDetail'],'greenIndexDetails')
+        except KeyError as ke:
+            self.warning(f'{app_name} has no Green Impact Data')
+            return None
+
+    """ **************************************************************************************************************
                                             General Metrics Data 
     ************************************************************************************************************** """
     def get_technology(self,app_name:str) -> DataFrame:
@@ -421,10 +439,13 @@ class Highlight(RestCall):
             DataFrame: _description_
         """
         df = json_normalize(self._get_metrics(app_name))
-        tech = json_normalize(df['technologies'])
-        tech = tech.transpose()
-        tech = json_normalize(tech[0])
-        return tech.sort_values(by=['totalLinesOfCode'],ascending=False)
+        if not df.empty:
+            tech = json_normalize(df['technologies'])
+            tech = tech.transpose()
+            tech = json_normalize(tech[0])
+            return tech.sort_values(by=['totalLinesOfCode'],ascending=False)
+        else:
+            return DataFrame()
 
     def get_total_lines_of_code(self,app_name:str) -> int:
         return json_normalize(self._get_metrics(app_name))['totalLinesOfCode']    
@@ -436,8 +457,9 @@ class Highlight(RestCall):
         metrics = self._get_metrics(app_name)
         return float(metrics['softwareHealth'])*100
 
-    def get_software_health_hml(self,app_name:str) -> str:
-        score = self.get_software_health_score(app_name)
+    def get_software_health_hml(self,app_name:str=None,score=None) -> str:
+        if score is None:
+            score = self.get_software_health_score(app_name)
         if score > 75:
             return 'high'
         elif score > 52:
@@ -484,9 +506,31 @@ class Highlight(RestCall):
         else:
             return 'low'
 
+    def get_software_cloud_score(self,app_name:str) -> float:
+        metrics = self._get_metrics(app_name)
+        return float(metrics['cloudReady'])*100
+    def get_get_cloud_hml(self,app_name:str=None,score=None) -> str:
+        if score is None:
+            score = self.get_software_cloud_score(app_name)
+        if score > 75:
+            return 'high'
+        elif score > 52:
+            return 'medium'
+        else:
+            return 'low'
+
     def get_software_oss_safty_score(self,app_name:str) -> float:
         metrics = self._get_metrics(app_name)
         return float(metrics['openSourceSafety'])*100
+    def get_get_software_oss_risk(self,app_name:str=None,score=None) -> str:
+        if score is None:
+            score = self.get_software_oss_safty_score(app_name)
+        if score > 75:
+            return 'low'
+        elif score > 52:
+            return 'medium'
+        else:
+            return 'high'
 
     def get_software_oss_license_score(self,app_name:str) -> float:
         metrics = self._get_metrics(app_name)
@@ -496,9 +540,21 @@ class Highlight(RestCall):
         metrics = self._get_metrics(app_name)
         return float(metrics['openSourceObsolescence'])*100
 
+    def get_software_green_score(self,app_name:str) -> float:
+        metrics = self._get_metrics(app_name)
+        green_index = metrics['greenIndex']
+        if green_index is None: green_index = 0
+        return float(green_index)*100
 
-
-
+    def get_software_green_hml(self,app_name:str=None,score=None) -> str:
+        if score is None:
+            score = self.get_software_green_score(app_name)
+        if score > 75:
+            return 'high'
+        elif score > 52:
+            return 'moderate'
+        else:
+            return 'low'
 
 def load_df_element(src,dst,name):
     if not (src.get(name) is None):
