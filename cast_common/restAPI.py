@@ -92,6 +92,7 @@ class RestCall(Logger):
 
         except exceptions.ConnectionError:
             self.error(f'Unable to connect to host {self._base_url}')
+            exit()
         except exceptions.Timeout:
             #TODO Maybe set up for a retry, or continue in a retry loop
             self.error(f'Timeout while performing api request using: {url}')
