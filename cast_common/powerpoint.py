@@ -5,6 +5,7 @@ from pptx.parts.embeddedpackage import EmbeddedXlsxPart
 from pptx.table import _Cell,Table, _Row, _Column
 from pptx.dml.color import RGBColor
 from pptx.oxml.xmlchemy import OxmlElement
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 from cast_common.logger import Logger, INFO,DEBUG
 from os.path import abspath,exists
@@ -46,10 +47,17 @@ class PowerPoint():
 
         for slide in slides:
             for shape in slide.shapes:
-                parts = shape.name.split(':')
-                shape_name = parts[0]
-                if shape_name == name:
-                    return shape
+                if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+                    for grp_shape in shape.shapes:
+                        parts = grp_shape.name.split(':')
+                        shape_name = parts[0]
+                        if shape_name == name:
+                            return grp_shape
+                else:
+                    parts = shape.name.split(':')
+                    shape_name = parts[0]
+                    if shape_name == name:
+                        return shape
         return None
 
     """ **************************************************************************************************************
