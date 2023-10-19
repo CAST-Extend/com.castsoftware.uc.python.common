@@ -3,6 +3,7 @@ from os import makedirs
 from os.path import exists,abspath,join
 from subprocess import Popen,PIPE,STDOUT
 from pandas.api.types import is_numeric_dtype
+from time import sleep
 import sys
 
 
@@ -209,7 +210,13 @@ def check_process(process:Popen,output=True):
     if not stdout is None and len(stdout): ret.append(stdout)
     if not stderr is None and len(stderr): ret.append(stderr)
     return process.returncode,ret
-    
+
+def track_process(proc):
+    if proc.poll() is None:
+        while line := proc.stdout.readline():
+            print(line.replace('\n','                                               '),end='\r')
+            sleep(.5)
+
 
 def convert_LOC(total:int):
     unit = ''
