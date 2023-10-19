@@ -117,6 +117,7 @@ def format_table(writer, data, sheet_name,width=None,total_line:bool=False):
     header_format = workbook.add_format({'text_wrap':True,
                                         'align': 'center'})
 
+    col_width = 10
     if width == None:
         width = []
         for col in data.columns:
@@ -205,15 +206,17 @@ def check_process(process:Popen,output=True):
             print(line)
         ret.append(line)
     stdout, stderr = process.communicate()
+    if not stdout is None and len(stdout): ret.append(stdout)
+    if not stderr is None and len(stderr): ret.append(stderr)
     return process.returncode,ret
     
 
 def convert_LOC(total:int):
     unit = ''
     if 1000 <= total <= 1000000:
-        unit = 'KLoc'
+        unit = 'KLOC'
         total = int(total/1000)
     elif total > 1000000:
-        unit = 'MLoc'
+        unit = 'MLOC'
         total = round(total/1000000,1)
     return total,unit
