@@ -13,7 +13,8 @@ class MRI(RestCall):
     _basic_auth = None
     _user = None 
     _pswd = None
-
+    _domain_list = None
+    
     def __init__(self,base_url=None, user=None, pswd=None, basic_auth=None, track_time=False,log_level=INFO):
 
         # general message to be used by ValueError exception
