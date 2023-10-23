@@ -205,7 +205,7 @@ class PowerPoint():
             if max_rows > 0:
                 drows = min(rows,max_rows)
             
-            tbl_row_cnt = header_rows+len(df)
+            tbl_row_cnt = min(len(df),max_rows)+header_rows
             if trows < tbl_row_cnt:
                 existing_rows = len(table._tbl.tr_lst)
                 nrc = tbl_row_cnt-existing_rows
