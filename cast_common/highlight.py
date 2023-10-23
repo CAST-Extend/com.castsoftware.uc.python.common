@@ -28,6 +28,13 @@ class Highlight(RestCall):
 
     log = None
 
+    grades = ['softwareHealth',
+                'softwareResiliency',
+                'softwareAgility',
+                'softwareElegance',
+                'cloudReady',
+                'openSourceSafety']
+
     def __init__(self,  
                  hl_user:str=None, hl_pswd:str=None,hl_basic_auth=None, hl_instance:int=0,
                  hl_apps:str=[],hl_tags:str=[], 
