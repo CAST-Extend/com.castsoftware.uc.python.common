@@ -4,6 +4,7 @@ from cast_common.util import format_table
 
 from requests import codes
 from pandas import ExcelWriter,DataFrame,json_normalize,concat
+from pptx.dml.color import RGBColor
 from typing import List
 from json import loads,dumps
 
@@ -28,12 +29,15 @@ class Highlight(RestCall):
 
     log = None
 
-    grades = ['softwareHealth',
-                'softwareResiliency',
-                'softwareAgility',
-                'softwareElegance',
-                'cloudReady',
-                'openSourceSafety']
+    grades = {
+        'softwareHealth':{'threshold':[53,75]},
+        'softwareResiliency':{'threshold':[65,87]},
+        'softwareAgility':{'threshold':[54,69]},
+        'softwareElegance':{'threshold':[39,70]},
+        'cloudReady':{'threshold':[50,75]},
+        'openSourceSafety':{'threshold':[50,75]},
+        'greenIndex':{'threshold':[50,75]}
+    }
 
     def __init__(self,  
                  hl_user:str=None, hl_pswd:str=None,hl_basic_auth=None, hl_instance:int=0,
@@ -155,7 +159,7 @@ class Highlight(RestCall):
             self._get_application_data(app_name)
             data = Highlight._data[app_name]
             metrics = data['metrics'][0]
-            return metrics
+            return metrics.copy()
         except KeyError as ke:
             self.warning(f'{app_name} has no Metric Data')
             return {}
@@ -460,6 +464,42 @@ class Highlight(RestCall):
     """ ******************************************************************************
                         Highlight Scores
     ****************************************************************************** """
+    def calc_scores(self, app_list:list) -> dict:
+        """ for each applicaiton in the Highligh portfolio retrieve and
+            calculate the grade.  
+
+        Args:
+            app_list (list): list of application name in the portfilio
+
+        Returns:
+            dict: list of scores
+        """
+        t_scores= {}
+        for key in self.grades:
+            t_scores[key]=0
+
+        for app in app_list:
+            metrics = self._get_metrics(app)
+            for key in self.grades:
+                if metrics[key] is not None: 
+                    t_scores[key]+=metrics[key]
+
+        t_apps = len(app_list)
+        for key in self.grades:
+            t_scores[key]=round(t_scores[key]*100/t_apps,1)
+            score = t_scores[key] 
+
+        return t_scores
+
+    def get_hml_color(self, hml:str):
+        if hml == 'high':
+            color = RGBColor(25,182,152)
+        elif hml == 'medium':
+            color = RGBColor(255,138,60)
+        else: 
+            color = RGBColor(234,97,83)
+        return color
+
     def get_software_health_score(self,app_name:str) -> float:
         metrics = self._get_metrics(app_name)
         return float(metrics['softwareHealth'])*100
@@ -474,70 +514,77 @@ class Highlight(RestCall):
         else:
             return 'low'
 
-    def get_software_agility_score(self,app_name:str) -> float:
-        metrics = self._get_metrics(app_name)
-        return float(metrics['softwareAgility'])*100
+    def get_software_health_color(self,app_name:str=None,score=None) -> RGBColor:
+        return self.get_hml_color(self.get_software_health_hml(app_name,score))
 
-    def get_software_agility_hml(self,app_name:str) -> str:
-        score = self.get_software_agility_score(app_name)
-        if score > 69:
-            return 'high'
-        elif score > 54:
-            return 'medium'
-        else:
-            return 'low'
 
-    def get_software_elegance_score(self,app_name:str) -> float:
-        metrics = self._get_metrics(app_name)
-        return float(metrics['softwareElegance'])*100
 
-    def get_software_elegance_hml(self,app_name:str) -> str:
-        score = self.get_software_elegance_score(app_name)
-        if score > 70:
-            return 'high'
-        elif score > 39:
-            return 'medium'
-        else:
-            return 'low'
 
-    def get_software_resiliency_score(self,app_name:str) -> float:
-        metrics = self._get_metrics(app_name)
-        return float(metrics['softwareResiliency'])*100
+
+    # def get_software_agility_score(self,app_name:str) -> float:
+    #     metrics = self._get_metrics(app_name)
+    #     return float(metrics['softwareAgility'])*100
+
+    # def get_software_agility_hml(self,app_name:str) -> str:
+    #     score = self.get_software_agility_score(app_name)
+    #     if score > 69:
+    #         return 'high'
+    #     elif score > 54:
+    #         return 'medium'
+    #     else:
+    #         return 'low'
+
+    # def get_software_elegance_score(self,app_name:str) -> float:
+    #     metrics = self._get_metrics(app_name)
+    #     return float(metrics['softwareElegance'])*100
+
+    # def get_software_elegance_hml(self,app_name:str) -> str:
+    #     score = self.get_software_elegance_score(app_name)
+    #     if score > 70:
+    #         return 'high'
+    #     elif score > 39:
+    #         return 'medium'
+    #     else:
+    #         return 'low'
+
+    # def get_software_resiliency_score(self,app_name:str) -> float:
+    #     metrics = self._get_metrics(app_name)
+    #     return float(metrics['softwareResiliency'])*100
     
-    def get_software_resiliency_hml(self,app_name:str) -> str:
-        score = self.get_software_resiliency_score(app_name)
-        if score > 87:
-            return 'high'
-        elif score > 65:
-            return 'medium'
-        else:
-            return 'low'
+    # def get_software_resiliency_hml(self,app_name:str) -> str:
+    #     score = self.get_software_resiliency_score(app_name)
+    #     if score > 87:
+    #         return 'high'
+    #     elif score > 65:
+    #         return 'medium'
+    #     else:
+    #         return 'low'
 
-    def get_software_cloud_score(self,app_name:str) -> float:
-        metrics = self._get_metrics(app_name)
-        return float(metrics['cloudReady'])*100
-    def get_get_cloud_hml(self,app_name:str=None,score=None) -> str:
-        if score is None:
-            score = self.get_software_cloud_score(app_name)
-        if score > 75:
-            return 'high'
-        elif score > 52:
-            return 'medium'
-        else:
-            return 'low'
+    # def get_software_cloud_score(self,app_name:str) -> float:
+    #     metrics = self._get_metrics(app_name)
+    #     return float(metrics['cloudReady'])*100
+    # def get_get_cloud_hml(self,app_name:str=None,score=None) -> str:
+    #     if score is None:
+    #         score = self.get_software_cloud_score(app_name)
+    #     if score > 75:
+    #         return 'high'
+    #     elif score > 52:
+    #         return 'medium'
+    #     else:
+    #         return 'low'
 
-    def get_software_oss_safty_score(self,app_name:str) -> float:
-        metrics = self._get_metrics(app_name)
-        return float(metrics['openSourceSafety'])*100
-    def get_get_software_oss_risk(self,app_name:str=None,score=None) -> str:
-        if score is None:
-            score = self.get_software_oss_safty_score(app_name)
-        if score > 75:
-            return 'low'
-        elif score > 52:
-            return 'medium'
-        else:
-            return 'high'
+    # def get_software_oss_safty_score(self,app_name:str) -> float:
+    #     metrics = self._get_metrics(app_name)
+    #     return float(metrics['openSourceSafety'])*100
+    # def get_get_software_oss_risk(self,app_name:str=None,score=None) -> str:
+    #     if score is None:
+    #         score = self.get_software_oss_safty_score(app_name)
+    #     if score > 75:
+    #         return 'low'
+    #     elif score > 52:
+    #         return 'medium'
+    #     else:
+    #         return 'high'
 
     def get_software_oss_license_score(self,app_name:str) -> float:
         metrics = self._get_metrics(app_name)

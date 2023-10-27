@@ -80,6 +80,8 @@ def format_table(writer, data, sheet_name,width=None,total_line:bool=False):
     workbook = writer.book
     worksheet = writer.sheets[sheet_name]
     rows = len(data)
+    if total_line:
+        rows += 1
     cols = len(data.columns)-1
     columns=[]
 
