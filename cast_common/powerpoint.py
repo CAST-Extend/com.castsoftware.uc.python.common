@@ -40,7 +40,9 @@ class PowerPoint():
         r = run._r
         r.getparent().remove(r)
 
-    def get_shape_by_name(self, name, use_slide=None):
+    def get_shape_by_name(self, name, use_slide=None, all=False):
+        rslt = []
+
         slides = self._prs.slides
         if use_slide != None:
             slides = [use_slide] 
@@ -52,13 +54,22 @@ class PowerPoint():
                         parts = grp_shape.name.split(':')
                         shape_name = parts[0]
                         if shape_name == name:
-                            return grp_shape
+                            if not all:
+                                return grp_shape
+                            else:
+                                rslt.append(grp_shape)
                 else:
                     parts = shape.name.split(':')
                     shape_name = parts[0]
                     if shape_name == name:
-                        return shape
-        return None
+                        if not all:
+                            return shape
+                        else:
+                            rslt.append(shape)
+        if len(rslt) == 0:
+            return None
+        else: 
+            return rslt
 
     """ **************************************************************************************************************
                                             Text Replace Functionality 
@@ -85,7 +96,13 @@ class PowerPoint():
 
     def _replace_slide_text (self, slide, search_str, repl):
         for shape in slide.shapes:
-            if shape.has_text_frame:
+            if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+                for grp_shape in shape.shapes:
+                    if grp_shape.has_text_frame:
+                        for paragraph in grp_shape.text_frame.paragraphs:
+                            if search_str in paragraph.text:
+                                self._replace_paragraph_text(paragraph,search_str,repl)
+            elif shape.has_text_frame:
                 for paragraph in shape.text_frame.paragraphs:
                     if search_str in paragraph.text:
                         self._replace_paragraph_text(paragraph,search_str,repl)
@@ -315,9 +332,20 @@ class PowerPoint():
                 except IndexError:
                     self.log.warning('index error in update_table while setting background color')
 
-    def change_paragraph_color(self,paragraph,rgb):
+    def change_paragraph_color(self,paragraph,rgb) -> None:
         run = self._merge_runs(paragraph)
         run.font.color.rgb=RGBColor(int(rgb[0]), int(rgb [1]), int(rgb[2]))
+
+    def fill_text_box_color(self,name:str,color:RGBColor) -> None:
+        shapes = PowerPoint.ppt.get_shape_by_name(name,all=True)
+        if shapes is not None:
+            for shape in shapes:
+                if shape.shape_type == MSO_SHAPE_TYPE.TEXT_BOX:
+                    shape.fill.solid()
+                    shape.fill.fore_color.rgb = color
+                else:
+                    self.log.warning(f'Error filling background color for {name}')
+
 
     def isFloat(str):
         rslt = True
