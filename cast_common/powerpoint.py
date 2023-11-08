@@ -206,6 +206,9 @@ class PowerPoint():
             if max_rows == 0:
                 max_rows=-1
                 self.log.warning(f'Invalid max rows notation: {table_shape.name}')
+        if max_rows < 0:
+            max_rows = len(df)
+
 
         if table_shape != None and table_shape.has_table:
             table=table_shape.table
