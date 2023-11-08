@@ -54,8 +54,6 @@ class RestCall(Logger):
         self._session.headers.update({'Accept': 'application/json'})
         #self._session.headers.update({'Authorization': self._auth})
 
-
-#    def get(self, url = "", headers = {'Accept': 'application/json'}):
     def get(self, url = "",header=None):
         start_dttm = ctime()
         start_tm = perf_counter()
