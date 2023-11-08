@@ -10,7 +10,13 @@ class HLRestCall(RestCall):
     """
     Class to handle HL REST API calls.
     """
-    def __init__(self, hl_base_url, hl_user, hl_pswd, hl_instance, timer_on=False,log_level=INFO):
+    def __init__(self, hl_base_url:str, hl_user:str, hl_pswd:str, hl_instance:int, timer_on=False,log_level=INFO):
+
+        if hl_base_url.endswith('/'):
+            hl_base_url = hl_base_url[:-1]
+        if not hl_base_url.endswith(r'/WS2'):
+            hl_base_url=f'{hl_base_url}/WS2'
+
         super().__init__(base_url=hl_base_url,user=hl_user,password=hl_pswd,track_time=timer_on,log_level=log_level)
 
         self._hl_instance = hl_instance
@@ -132,8 +138,8 @@ class HLRestCall(RestCall):
 
         return lic,cves,len(third_party)
     
-    def create_an_app(self, url, instance_id, app_name):
-        url = f'{url}/domains/{instance_id}/applications/'
+    def create_an_app(self, instance_id, app_name):
+        url = f'{self._base_url}/domains/{instance_id}/applications/'
         payload =[{"name": app_name,"domains": [{"id": instance_id}]}]
 
         resp = post(url, auth=self._auth, json=payload)        
