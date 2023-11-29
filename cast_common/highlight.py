@@ -132,7 +132,7 @@ class Highlight(RestCall):
     def _get_application_data(self,app:str=None):
         self.debug('Retrieving all HL application specific data')
         
-        if str is None:
+        if app is None:
             df = Highlight._apps
         else:
             df = Highlight._apps[Highlight._apps['name']==app]
@@ -170,7 +170,7 @@ class Highlight(RestCall):
         if app_name not in Highlight._apps['name'].to_list():
             raise ValueError(f'{app_name} is not a selected application')
 
-        if str is None:
+        if app_name is None:
             df = Highlight._apps
         else:
             df = Highlight._apps[Highlight._apps['name']==app_name]
@@ -352,13 +352,16 @@ class Highlight(RestCall):
 
     def get_cve_critical(self, app_name:str) -> DataFrame:
         cves = self.get_cve_data(app_name)
-        return cves[cves['criticity']=='CRITICAL']
+        if not cves.empty:
+            return cves[cves['criticity']=='CRITICAL']
     def get_cve_high(self, app_name:str) -> DataFrame:
         cves = self.get_cve_data(app_name)
-        return cves[cves['criticity']=='HIGH']
+        if not cves.empty:
+            return cves[cves['criticity']=='HIGH']
     def get_cve_medium(self, app_name:str) -> DataFrame:
         cves = self.get_cve_data(app_name)
-        return cves[cves['criticity']=='MEDIUM']
+        if not cves.empty:
+            return cves[cves['criticity']=='MEDIUM']
 
     def get_license_data(self,app_name:str) -> DataFrame:
         third_party = self._get_third_party(app_name)['thirdParties']
