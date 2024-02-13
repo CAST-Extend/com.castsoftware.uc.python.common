@@ -51,8 +51,9 @@ class AipRestCall(MRI):
             
         try: 
             domain_id = list(filter(lambda x:x["schema"]==schema_name,MRI._domain_list))[0]['name']
-        except IndexError:
+        except (IndexError,TypeError):
             self.error(f'Domain not found for schema {schema_name}')
+            domain_id = -1        
 
         return domain_id
 
