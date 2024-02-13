@@ -1,13 +1,14 @@
 from pptx import Presentation
 from pptx.parts.chart import ChartPart
-from pptx.chart.data import CategoryChartData
+from pptx.chart.data import CategoryChartData,ChartData
 from pptx.parts.embeddedpackage import EmbeddedXlsxPart
 from pptx.table import _Cell,Table, _Row, _Column
 from pptx.dml.color import RGBColor
 from pptx.oxml.xmlchemy import OxmlElement
+from pptx.slide import Slide
 from pptx.enum.shapes import MSO_SHAPE_TYPE
-
 from cast_common.logger import Logger, INFO,DEBUG
+
 from os.path import abspath,exists
 from copy import deepcopy
 
@@ -115,6 +116,7 @@ class PowerPoint():
                         cell = tbl.cell(r,c)
                         for paragraph in cell.text_frame.paragraphs:
                             self._replace_paragraph_text(paragraph,search_str,repl)
+        pass
 
     def _replace_paragraph_text (self, paragraph, search_str, repl):
         """
@@ -170,9 +172,12 @@ class PowerPoint():
 
             if shape.has_chart:
                 chart_data = CategoryChartData()
+#                chart_data = ChartData()
                 chart_data.categories = titles
-                chart_data.add_series('Series 1', data)
+                chart_data.add_series('Series 1', tuple(data))
                 shape.chart.replace_data(chart_data)
+        else:
+            self.log.warning(f'chart {name} not found in template')
 
     def replace_block(self, begin_tag, end_tag, repl_text):
         for slide in self._prs.slides:
@@ -188,10 +193,83 @@ class PowerPoint():
                             new_text = text_prefix + repl_text + text_suffix
                             run.text = run.text.replace(run_text,new_text)
 
+    from typing import Union
+
+    def estimate_text_box_size(self,
+            txt,
+            font,  # ImageFont
+            max_width: Union[int, None] = None,
+            line_spacing: int = 4
+    ):
+        """
+        Example of use:
+        right_margin = left_margin = Length(Cm(0.25)).pt * pt_per_pixel
+        top_margin = bottom_margin = Length(Cm(0.13)).pt * pt_per_pixel
+        width, height = estimate_text_box_size(
+            txt,
+            font,
+            max_width=shape_width - (right_margin + left_margin),
+        )
+
+        print("Computed in pixels (w, h)")
+        print((width + right_margin + left_margin, height + top_margin + bottom_margin))
+
+
+        :param txt:
+        :param font:
+        :param max_width:
+        :param line_spacing:
+        :return:
+        """
+
+        from PIL import ImageDraw, Image
+
+        image = Image.new(size=(400, 300), mode='RGB')
+        draw = ImageDraw.Draw(image)
+        emu_per_inch = 914400
+        px_per_inch = 72.0
+        pt_per_pixel = 0.75
+
+        fontsize_pt = 12
+        # font = ImageFont.truetype("arial.ttf", int(fontsize_pt / pt_per_pixel))
+        import textwrap, math
+        if max_width is not None:
+            actual_txt = []
+            for line in txt.split("\n"):
+                _, _, width, h = font.getbbox(line)
+                split_at = len(line) // math.ceil(width / max_width)
+                actual_txt = actual_txt + textwrap.wrap(line, width=split_at)
+
+            new_lines = len(actual_txt)
+            actual_txt = "\n".join(
+                actual_txt
+            )
+        else:
+            actual_txt = txt
+            new_lines = 0
+
+        left, top, right, bottom = draw.multiline_textbbox(
+            (0, 0), actual_txt, font=font, spacing=line_spacing
+        )
+        ascent, descent = font.getmetrics()
+
+        return right - left, bottom  # + descent * new_lines
+
 
     """ ***********************************************************************************************************
                                                 Update Table Functionality
     *********************************************************************************************************** """
+    def table_max_rows(self,tbl) -> int:
+        #a notation of :## at the end of the table name indicates the max row count
+        max_rows=-1
+        splt = tbl.name.split(':')
+        if len(splt) > 1:
+            max_rows=int(splt[1])
+            if max_rows == 0:
+                max_rows=-1
+                self.log.warning(f'Invalid max rows notation: {tbl.name}')
+        return max_rows
+
     def update_table(self, name, df:DataFrame, include_index=True, 
                      background=None, forground=None,neg_num_bkg:list=None, 
                      header_rows=1,max_rows=-1):
@@ -199,13 +277,8 @@ class PowerPoint():
         if table_shape is None:
             raise ValueError(f'Table not found in template: {name}')
         
-        #a notation of :## at the end of the table name indicates the max row count
-        splt = table_shape.name.split(':')
-        if len(splt) > 1:
-            max_rows=int(splt[1])
-            if max_rows == 0:
-                max_rows=-1
-                self.log.warning(f'Invalid max rows notation: {table_shape.name}')
+        if max_rows < 0:
+            max_rows = self.table_max_rows(table_shape)
         if max_rows < 0:
             max_rows = len(df)
 
@@ -225,13 +298,32 @@ class PowerPoint():
             if max_rows > 0:
                 drows = min(rows,max_rows)
             
+            """ calculate the number of rows in the table
+                    * don't add more rows than the table reference max row count (table_name:max_rows)
+                    * determin if the text will wrap, if so count as multiple rows
+                        - the pptx packages does not directly support this
+                        - perform a rough calculation using the font size and table cell margins
+            """
             tbl_row_cnt = min(len(df),max_rows)+header_rows
-            if trows < tbl_row_cnt:
-                existing_rows = len(table._tbl.tr_lst)
-                nrc = tbl_row_cnt-existing_rows
-                #nrc = drows-trows+header_rows
-                for r in range(nrc):
-                    self.add_row(table)
+            existing_rows = len(table._tbl.tr_lst)
+            nrc = tbl_row_cnt-existing_rows
+            #nrc = drows-trows+header_rows
+            for r in range(nrc):
+                self.add_row(table)
+
+            # if trows < tbl_row_cnt:
+            #     m = df.values
+            #     existing_rows = len(table._tbl.tr_lst)
+            #     nrc = tbl_row_cnt-existing_rows
+            #     for row in range(rows):
+            #         for col in range(cols):
+            #             val = m[row, col]
+            #             text = str(val) 
+
+            #             # cell = table.cell(row+header_rows,col)
+            #             # font = cell.text_frame.paragraphs[0].runs[0].font
+            #             # width, height = self.estimate_text_box_size(text,font)                   
+            #             pass
 
 
             # Insert the row zero names
@@ -304,6 +396,7 @@ class PowerPoint():
 
                     except IndexError:
                         self.log.debug(f'index error in update_table ({name}) while setting values')
+                        break
     
     def set_table_bgcolor(self,table,colors,rows,cols,header_rows):
         for row in range(rows):
@@ -314,7 +407,7 @@ class PowerPoint():
                     #     cell = table.cell(row+1,col)
                     # else:
                     cell = table.cell(row+header_rows,col)
-                    cell.fill.solid()
+                    cell.fill.solid() 
                     cell.fill.fore_color.rgb = RGBColor(int(rgb[0]), int(rgb [1]), int(rgb[2]))
                 except IndexError:
                     self.log.warning('index error in update_table while setting background color')
@@ -343,7 +436,7 @@ class PowerPoint():
         shapes = PowerPoint.ppt.get_shape_by_name(name,all=True)
         if shapes is not None:
             for shape in shapes:
-                if shape.shape_type == MSO_SHAPE_TYPE.TEXT_BOX:
+                if shape.shape_type in [ MSO_SHAPE_TYPE.TEXT_BOX, MSO_SHAPE_TYPE.AUTO_SHAPE]:
                     shape.fill.solid()
                     shape.fill.fore_color.rgb = color
                 else:
@@ -370,70 +463,37 @@ class PowerPoint():
         table._tbl.append(new_row) 
         return new_row
 
+    # def copy_slide(self,index=-1,template=None):
+    #     if index<0 and template is None:
+    #         raise KeyError('invalid parameters: either index or template are required')
+    #     if template is not None:
+    #         source = template
+    #     else:
+    #         source = self._prs.slides[index]
 
-    def duplicate_slides(self, app_cnt):
-        for cnt in range(2,app_cnt+1):
-            for idx, slide in enumerate(self._prs.slides):
-                for shape in slide.shapes:
-                    if shape.has_text_frame:
-                        for paragraph in shape.text_frame.paragraphs:
-                            if paragraph.text == "{app_per_page}":
-                                new_slide = self.copy_slide(idx)
-                                self._replace_slide_text(new_slide,"{app_per_page}","")
-                                self._replace_slide_text(new_slide,"{app1_",f'{{app{cnt}_')
-                                self.replace_shape_name(new_slide,"app1_",f'app{cnt}_')
-                            # if paragraph.text == "{multi_page}":
-                            #     new_slide = self.copy_slide(idx)
-                            #     self.replace_slide_text(new_slide,"{app_per_page}","")
-                            #     self.replace_slide_text(new_slide,"{app1_",f'{{app{cnt}_')
-                            #     self.replace_shape_name(new_slide,"app1_",f'app{cnt}_')
+    #     # Append slide with source's layout. Then delete shapes to get a blank slide
+    #     dest = self._prs.slides.add_slide(source.slide_layout)
+    #     for shp in dest.shapes:
+    #         shp.element.getparent().remove(shp.element)dest
+    #     # Copy shapes from source, in order
+    #     for shape in source.shapes:
+    #         new_shape = deepcopy(shape.element)
+    #         dest.shapes._spTree.insert_element_before(new_shape, 'p:extLst')
+    #     # Copy rels from source
+    #     for key, val in source.part.rels.items():
+    #         target = val._target
+    #         dest.part.rels.add_relationship(val.reltype, target, val.rId, val.is_external)
 
-        for idx, slide in enumerate(self._prs.slides):
-            for shape in slide.shapes:
-                if shape.has_text_frame:
-                    for paragraph in shape.text_frame.paragraphs:
-                        if paragraph.text == "{app_per_page}":
-                            self._replace_slide_text(slide,"{app_per_page}","")
+    #     # # Move appended slide into target_index
+    #     # self._prs.slides.element.insert(target_index, prs.slides.element[-1])
+    #     return dest
 
-    def copy_slide(self,index=-1,template=None):
-        if index<0 and template is None:
-            raise KeyError('invalid parameters: either index or template are required')
 
-        if template is not None:
-            source = template
-        else:
-            source = self._prs.slides[index]
-
-        blank_slide_layout = source.slide_layout
-        dest = self._prs.slides.add_slide(blank_slide_layout)
-
-        for shp in source.shapes:
-            el = shp.element
-            newel = deepcopy(el)
-            dest.shapes._spTree.insert_element_before(newel, 'p:extLst')
-
-        for key, value in source.part.rels.items():
-            try:
-                # Make sure we don't copy a notesSlide relation as that won't exist
-                if "notesSlide" not in value.reltype:
-                    target = value._target
-                    # if the relationship was a chart, we need to duplicate the embedded chart part and xlsx
-                    if "chart" in value.reltype:
-                        partname = target.package.next_partname(
-                            ChartPart.partname_template)
-                        xlsx_blob = target.chart_workbook.xlsx_part.blob
-                        target = ChartPart(partname, target.content_type,
-                                        deepcopy(target._element), package=target.package)
-
-                        target.chart_workbook.xlsx_part = EmbeddedXlsxPart.new(
-                            xlsx_blob, target.package)
-
-                    dest.part.rels.add_relationship(value.reltype,
-                                                    target,
-                                                    value.rId)
-            except AttributeError as err:
-                self.logger.error(f'Attribute Error {err} while copying slide {index} part {key}')
-        return dest
+    def move_slide(self,old_index, new_index):
+        xml_slides = self._prs.slides._sldIdLst
+        slides = list(xml_slides)
+        xml_slides.remove(slides[old_index])
+        xml_slides.insert(new_index, slides[old_index])
 
     def copy_block(self, tag, prefix, count,slide=None):
         search_start = f'{{{tag}}}'
@@ -555,4 +615,83 @@ class PowerPoint():
         if hasattr(shape,'_parent'):
             rslt = shape._parent
         return rslt
+
+    def get_slide(self,shape):
+        while True:
+            shape = self.ppt.get_shape_parent(shape) 
+            if type(shape) is Slide:
+                return shape
+            elif shape is None:
+                break
+        return None
+
+    def duplicate_slides(self, app_cnt):
+        target_index = -1
+        appendix=self.get_shape_by_name('StartAppendix')
+        if appendix is not None:
+            target_index = self._prs.slides.index(appendix._parent.parent)
+
+        for cnt in range(2,app_cnt+1):
+            for idx, slide in enumerate(self._prs.slides):
+                for shape in slide.shapes:
+                    if shape.has_text_frame:
+                        for paragraph in shape.text_frame.paragraphs:
+                            if paragraph.text == "{app_per_page}":
+                                # new_slide = duplicate_slide(self._prs,slide)
+
+                                new_slide = self.copy_slide(idx,target_index=target_index)
+                                self._replace_slide_text(new_slide,"{app_per_page}","")
+                                self._replace_slide_text(new_slide,"{app1_",f'{{app{cnt}_')
+                                self.replace_shape_name(new_slide,"app1_",f'app{cnt}_')
+                                target_index+=1
+
+        for idx, slide in enumerate(self._prs.slides):
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    for paragraph in shape.text_frame.paragraphs:
+                        if paragraph.text == "{app_per_page}":
+                            self._replace_slide_text(slide,"{app_per_page}","")
+
+    def copy_slide(self,index=-1,template=None,target_index=-1):
+        if index<0 and template is None:
+            raise KeyError('invalid parameters: either index or template are required')
+
+        if template is not None:
+            source = template
+        else:
+            source = self._prs.slides[index]
+
+        blank_slide_layout = source.slide_layout
+        dest = self._prs.slides.add_slide(blank_slide_layout)
+        if target_index >= 0:
+            self.move_slide(self._prs.slides.index(dest),target_index)
+
+        for shp in source.shapes:
+            el = shp.element
+            newel = deepcopy(el)
+            dest.shapes._spTree.insert_element_before(newel, 'p:extLst')
+
+        for key, value in source.part.rels.items():
+            try:
+                # Make sure we don't copy a notesSlide relation as that won't exist
+                if "notesSlide" not in value.reltype:
+                    target = value._target
+                    # if the relationship was a chart, we need to duplicate the embedded chart part and xlsx
+                    if "chart" in value.reltype:
+                        partname = target.package.next_partname(ChartPart.partname_template)
+                        xlsx_blob = target.chart_workbook.xlsx_part.blob
+                        target = ChartPart(partname, target.content_type,
+                                        deepcopy(target._element), package=target.package)
+                        target.chart_workbook.xlsx_part = EmbeddedXlsxPart.new(xlsx_blob, target.package)
+
+                    dest.part.rels.add_relationship(value.reltype,
+                                                    target,
+                                                    value.rId)
+
+            except AttributeError as err:
+                self.log.error(f'Attribute Error {err} while copying slide {index} part {key}')
+            except KeyError as ex:
+                self.log.error(f'KeyError {ex} while copying slide {index} part {key}')
+
+        return dest
 
