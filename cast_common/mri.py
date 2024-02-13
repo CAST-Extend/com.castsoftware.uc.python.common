@@ -11,11 +11,13 @@ class MRI(RestCall):
 
     _base_url = None
     _basic_auth = None
+    _api_auth = None
     _user = None 
     _pswd = None
+    _api_key = None
     _domain_list = None
     
-    def __init__(self,base_url=None, user=None, pswd=None, basic_auth=None, track_time=False,log_level=INFO):
+    def __init__(self,base_url=None, user=None, pswd=None, basic_auth=None, token=False, track_time=False,log_level=INFO):
 
         # general message to be used by ValueError exception
         msg='must be supplied with the first MRI class instance'
@@ -52,15 +54,15 @@ class MRI(RestCall):
             if not pswd is None:
                 MRI._pswd=pswd
 
-            if not basic_auth is None:
-                MRI._basic_auth=basic_auth
+        if not basic_auth is None:
+            MRI._basic_auth=basic_auth
 
         # if MRI._template is None:
         #     if template is None:
         #         raise ValueError(f'Template {msg}') 
         #     MRI._template=template
 
-        super().__init__(base_url=MRI._base_url, user=MRI._user, password=MRI._pswd, 
+        super().__init__(base_url=MRI._base_url, user=MRI._user, password=MRI._pswd, api_key=token,
                          basic_auth=MRI._basic_auth,track_time=track_time,log_level=MRI._log_level)
 
     pass
