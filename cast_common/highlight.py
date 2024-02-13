@@ -107,7 +107,8 @@ class Highlight(RestCall):
             # retrieve all applications from HL REST API
             Highlight._apps_full_list = DataFrame(self._get_applications())
 #            Highlight._apps_full_list.dropna(subset=['metrics'],inplace=True)
-            self.info(f'Found {len(Highlight._apps_full_list)} analyzed applications: {",".join(Highlight._apps_full_list["name"])}')
+#            self.info(f'Found {len(Highlight._apps_full_list)} analyzed applications: {",".join(Highlight._apps_full_list["name"])}')
+            self.info(f'Found {len(Highlight._apps_full_list)} analyzed applications')
     
             # if the apps is not already of list type then convert it now
             if not isinstance(hl_apps,list):
@@ -394,36 +395,42 @@ class Highlight(RestCall):
 
     def get_license_high(self,app_name:str) -> DataFrame:
         lic = self.get_license_data(app_name)
+        if lic.empty:
+            return DataFrame()
         return lic[lic['compliance']=='high'] 
 
     def get_license_medium(self,app_name:str) -> DataFrame:
         lic = self.get_license_data(app_name)
+        if lic.empty:
+            return DataFrame()
         return lic[lic['compliance']=='medium']   
 
     def get_license_low(self,app_name:str) -> DataFrame:
         lic = self.get_license_data(app_name)
+        if lic.empty:
+            return DataFrame()
         return lic[lic['compliance']=='low']   
 
     """ **************************************************************************************************************
                                             Cloud Ready Data 
     ************************************************************************************************************** """
-    def get_cloud_detail(self,app_name:str)->DataFrame:
-        """Highlight cloud ready data
+    # def get_cloud_detail(self,app_name:str)->DataFrame:
+    #     """Highlight cloud ready data
 
-        Args:
-            app_name (str): name of the application
+    #     Args:
+    #         app_name (str): name of the application
 
-        Returns:
-            DataFrame: flattened version of the Highlight cloud ready data
-        """
-        try:
-            return json_normalize(self._get_metrics(app_name)['cloudReadyDetail'],['cloudReadyDetails'],meta=['technology','cloudReadyScan'])
-        except KeyError as ke:
-            self.warning(f'{app_name} has no Cloud Ready Data')
-            return None
+    #     Returns:
+    #         DataFrame: flattened version of the Highlight cloud ready data
+    #     """
+    #     try:
+    #         return json_normalize(self._get_metrics(app_name)['cloudReadyDetail'],['cloudReadyDetails'],meta=['technology','cloudReadyScan'])
+    #     except KeyError as ke:
+    #         self.warning(f'{app_name} has no Cloud Ready Data')
+    #         return None
 
     """ **************************************************************************************************************
-                                            Cloud Ready Data 
+                                            Green Detail Data 
     ************************************************************************************************************** """
     def get_green_detail(self,app_name:str)->DataFrame:
         """Highlight green impact data
@@ -439,6 +446,27 @@ class Highlight(RestCall):
         except KeyError as ke:
             self.warning(f'{app_name} has no Green Impact Data')
             return None
+
+    _cloud={}
+    def get_cloud_detail(self,app_name:str)->DataFrame:
+        if app_name in Highlight._cloud:
+            return Highlight._cloud[app_name]
+        
+
+        columns = ['technology','cloudRequirement.display','cloudRequirement.ruleType','roadblocks','cloudEffort','cloudRequirement.criticality','files']
+
+        cloud_data = json_normalize(self._get_metrics(app_name)['cloudReadyDetail'])
+        rslt = DataFrame()
+        for index,row in cloud_data.iterrows():
+            tech = row['technology']
+            db = json_normalize(row['cloudReadyDetails'])
+            db['technology']=tech
+            db = db[columns]
+            rslt = concat([rslt,db],ignore_index=True)
+            pass
+
+        Highlight._cloud[app_name]=rslt
+        return rslt
 
     """ **************************************************************************************************************
                                             General Metrics Data 
@@ -484,7 +512,7 @@ class Highlight(RestCall):
         for app in app_list:
             metrics = self._get_metrics(app)
             for key in self.grades:
-                if metrics[key] is not None: 
+                if key in metrics and metrics[key] is not None: 
                     t_scores[key]+=metrics[key]
 
         t_apps = len(app_list)
