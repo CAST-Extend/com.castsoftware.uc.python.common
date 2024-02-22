@@ -346,7 +346,7 @@ class PowerPoint():
                 cols = cols-1
 
             if background:
-                self.set_table_bgcolor(table,df[background],rows,cols,header_rows)
+                self.set_table_bgcolor(table,df[background],nrc,cols,header_rows)
             if forground:
                 try:
                     self.set_table_font_color(table,df[forground],rows,cols,header_rows)
