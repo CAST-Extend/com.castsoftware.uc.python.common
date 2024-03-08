@@ -108,8 +108,30 @@ class Highlight(RestCall):
             Highlight._apps_full_list = DataFrame(self._get_applications())
 #            Highlight._apps_full_list.dropna(subset=['metrics'],inplace=True)
 #            self.info(f'Found {len(Highlight._apps_full_list)} analyzed applications: {",".join(Highlight._apps_full_list["name"])}')
+
+            # if the tag parameter is passed then filter applictions by the tag
+            if type(hl_tags) is not list:
+                hl_tags = [hl_tags]
+            hl_apps = []
+            stop = False
+            for tag in hl_tags:
+                for idx,app in Highlight._apps_full_list.iterrows():
+                    id = app['id']
+                    rslt,json = self.get(f'domains/{Highlight._instance_id}/applications/{id}/tags')
+                    if rslt == codes.ALL_GOOD:
+                        for t in json:
+                            if t['label'] == tag:
+                                for item in t['applications']:
+                                    hl_apps.append(item['name'])
+                                stop = True
+                                break
+                    if stop:
+                        break
+                    pass
+
+
             self.info(f'Found {len(Highlight._apps_full_list)} analyzed applications')
-    
+
             # if the apps is not already of list type then convert it now
             if not isinstance(hl_apps,list):
                 hl_apps=list(hl_apps.split(','))
@@ -138,8 +160,7 @@ class Highlight(RestCall):
         else:
             df = Highlight._apps[Highlight._apps['name']==app]
 
-        for idx,app in df.iterrows():
-            app_name = app['name']
+        for app_name in df['name']:
             if app_name not in Highlight._data:
                 try:
                     if not app_name in Highlight._data:
@@ -159,7 +180,7 @@ class Highlight(RestCall):
 
             self._get_application_data(app_name)
             data = Highlight._data[app_name]
-            metrics = data['metrics'][0]
+            metrics = data['metrics'][0][0]
             return metrics.copy()
         except KeyError as ke:
             self.warning(f'{app_name} has no Metric Data')
@@ -224,8 +245,12 @@ class Highlight(RestCall):
     # def _get_top_metric(self,metric:str) -> DataFrame:
     #     return DataFrame(self.post(f'domains/{Highlight._instance_id}/metrics/top?metric=cloudReady&order=desc',header={'Content-type':'application/json'}))
 
-    def _get_app_from_rest(self,app:str) -> dict:
-        return DataFrame(self._get(f'domains/{Highlight._instance_id}/applications/{self.get_app_id(app)}'))
+    def _get_app_from_rest(self,app:str) -> DataFrame:
+        ap_data = self._get(f'domains/{Highlight._instance_id}/applications/{self.get_app_id(app)}')
+        df = DataFrame.from_dict(ap_data, orient='index')
+        df = df.transpose()
+        return df
+        # return DataFrame(self._get(f'domains/{Highlight._instance_id}/applications/{self.get_app_id(app)}'))
 
     def get_app_id(self,app_name:str) -> int:
         """get the application id
@@ -455,15 +480,17 @@ class Highlight(RestCall):
 
         columns = ['technology','cloudRequirement.display','cloudRequirement.ruleType','roadblocks','cloudEffort','cloudRequirement.criticality','files']
 
-        cloud_data = json_normalize(self._get_metrics(app_name)['cloudReadyDetail'])
+        data = self._get_metrics(app_name) 
         rslt = DataFrame()
-        for index,row in cloud_data.iterrows():
-            tech = row['technology']
-            db = json_normalize(row['cloudReadyDetails'])
-            db['technology']=tech
-            db = db[columns]
-            rslt = concat([rslt,db],ignore_index=True)
-            pass
+        if 'cloudReadyDetail' in data:
+            cloud_data = json_normalize(data['cloudReadyDetail'])
+            for index,row in cloud_data.iterrows():
+                tech = row['technology']
+                db = json_normalize(row['cloudReadyDetails'])
+                db['technology']=tech
+                db = db[columns]
+                rslt = concat([rslt,db],ignore_index=True)
+                pass
 
         Highlight._cloud[app_name]=rslt
         return rslt
