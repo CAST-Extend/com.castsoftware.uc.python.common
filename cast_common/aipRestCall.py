@@ -51,8 +51,9 @@ class AipRestCall(MRI):
             
         try: 
             domain_id = list(filter(lambda x:x["schema"]==schema_name,MRI._domain_list))[0]['name']
-        except IndexError:
+        except (IndexError,TypeError):
             self.error(f'Domain not found for schema {schema_name}')
+            domain_id = -1        
 
         return domain_id
 
@@ -120,7 +121,17 @@ class AipRestCall(MRI):
 
         return snapshot
 
-    def get_grades_by_technology(self,domain_id,snapshot):
+    def get_modules(self,snapshot:dict)->list:
+        module_href = snapshot['module_href']
+        (status,json) = self.get(module_href)
+        if status == codes.ok and len(json) > 0:
+            df = json_normalize(json)
+            return df['name'].to_list()
+        else:
+            return []
+
+
+    def get_grades_by_technology(self,domain_id:str,snapshot:dict):
         self._log.debug(f'retrieving grades by technology for domain {domain_id} and snapshot {snapshot}')
         first_tech=True
         grade = DataFrame(columns=list(self._measures.values()))
@@ -148,9 +159,9 @@ class AipRestCall(MRI):
 
                         if typ == 'score':
                             a[self._measures[key]] = a[self._measures[key]] * 100
-
+                    pass
                 else:
-                    self.error (f'Error retrieving technology information:  {url}')
+                    self.debug (f'Error retrieving technology information:  {url}')
             if first_tech==True:
                 grade.loc['All'] = a
             grade.loc[tech] = t
@@ -179,6 +190,30 @@ class AipRestCall(MRI):
                 size_df.loc['All'] = a
             size_df.loc[tech] = t
             first_tech=False
+        return size_df
+
+    def get_sizing_by_module(self,domain_id:str,snapshot:DataFrame,sizing:dict):
+        self._log.debug(f'retrieving sizing by module for domain {domain_id} and snapshot {snapshot}')
+        first_module=True
+        size_df = DataFrame(columns=list(sizing.values()))
+        module_list = self.get_modules(snapshot)
+        for module in module_list:
+            t={}
+            a={}
+            for key in sizing: 
+                url = f'{domain_id}/applications/3/results?sizing-measures={key}&modules={module}'
+                (status,json) = self.get(url)
+                if status == codes.ok and len(json) > 0:
+                    try:
+                        t[sizing[key]]= json[0]['applicationResults'][0]['moduleResults'][0]['result']['value']
+                        if first_module==True:
+                            a[sizing[key]]=json[0]['applicationResults'][0]['result']['value']
+                    except IndexError:
+                        self._log.debug(f'{domain_id} no grade available for {key} {tech}')
+            if first_module==True:
+                size_df.loc['All'] = a
+            size_df.loc[module] = t
+            first_module=False
         return size_df
 
     def get_distribution_sizing(self, domain_id, metric_id):
@@ -294,9 +329,9 @@ class AipRestCall(MRI):
                                                 "rule.id":'Rule Id'})
                 rslt_df = rslt_df[['Action Plan Priority','Rule Name','Object Name Location','Technology','Rule Id']]
                 
-                AipRestCall._action_plan[domain_id]={}
-                AipRestCall._action_plan[domain_id]['summary']=ap_summary_df
-                AipRestCall._action_plan[domain_id]['detail']=rslt_df
+            AipRestCall._action_plan[domain_id]={}
+            AipRestCall._action_plan[domain_id]['summary']=ap_summary_df
+            AipRestCall._action_plan[domain_id]['detail']=rslt_df
 
         return (AipRestCall._action_plan[domain_id]['detail'], AipRestCall._action_plan[domain_id]['summary'])
 

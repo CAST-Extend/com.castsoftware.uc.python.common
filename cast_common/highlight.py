@@ -1,6 +1,5 @@
 from cast_common.restAPI import RestCall
 from cast_common.logger import Logger, INFO,DEBUG
-from cast_common.util import format_table
 
 from requests import codes
 from pandas import ExcelWriter,DataFrame,json_normalize,concat
@@ -95,20 +94,39 @@ class Highlight(RestCall):
         super().__init__(base_url=Highlight._base_url, user=Highlight._hl_user, password=Highlight._hl_pswd, 
                          basic_auth=Highlight._hl_basic_auth,track_time=timer_on,log_level=Highlight._log_level)
 
-        # self._business = self._get_top_metric('businessValue')
-        # self._cloud = self._get_top_metric('cloudValue')
-        # self._oss = self._get_top_metric('openSourceSafty')
-        # #self._elegance = self._get_top_metric('softwareElegance')
-
         if reset_data:
+
+            Highlight._benchmark = DataFrame(self._get(r'/benchmark'))
+
             Highlight._tags = self._get_tags()
             Highlight._apps_full_list = []
 
             # retrieve all applications from HL REST API
             Highlight._apps_full_list = DataFrame(self._get_applications())
-#            Highlight._apps_full_list.dropna(subset=['metrics'],inplace=True)
-            self.info(f'Found {len(Highlight._apps_full_list)} analyzed applications: {",".join(Highlight._apps_full_list["name"])}')
-    
+
+            # if the tag parameter is passed then filter applictions by the tag
+            if type(hl_tags) is not list:
+                hl_tags = [hl_tags]
+            hl_apps = []
+            stop = False
+            for tag in hl_tags:
+                for idx,app in Highlight._apps_full_list.iterrows():
+                    id = app['id']
+                    rslt,json = self.get(f'domains/{Highlight._instance_id}/applications/{id}/tags')
+                    if rslt == codes.ALL_GOOD:
+                        for t in json:
+                            if t['label'] == tag:
+                                for item in t['applications']:
+                                    hl_apps.append(item['name'])
+                                stop = True
+                                break
+                    if stop:
+                        break
+                    pass
+
+
+            self.info(f'Found {len(Highlight._apps_full_list)} analyzed applications')
+
             # if the apps is not already of list type then convert it now
             if not isinstance(hl_apps,list):
                 hl_apps=list(hl_apps.split(','))
@@ -132,13 +150,12 @@ class Highlight(RestCall):
     def _get_application_data(self,app:str=None):
         self.debug('Retrieving all HL application specific data')
         
-        if str is None:
+        if app is None:
             df = Highlight._apps
         else:
             df = Highlight._apps[Highlight._apps['name']==app]
 
-        for idx,app in df.iterrows():
-            app_name = app['name']
+        for app_name in df['name']:
             if app_name not in Highlight._data:
                 try:
                     if not app_name in Highlight._data:
@@ -158,7 +175,7 @@ class Highlight(RestCall):
 
             self._get_application_data(app_name)
             data = Highlight._data[app_name]
-            metrics = data['metrics'][0]
+            metrics = data['metrics'][0][0]
             return metrics.copy()
         except KeyError as ke:
             self.warning(f'{app_name} has no Metric Data')
@@ -170,7 +187,7 @@ class Highlight(RestCall):
         if app_name not in Highlight._apps['name'].to_list():
             raise ValueError(f'{app_name} is not a selected application')
 
-        if str is None:
+        if app_name is None:
             df = Highlight._apps
         else:
             df = Highlight._apps[Highlight._apps['name']==app_name]
@@ -208,7 +225,7 @@ class Highlight(RestCall):
 
     def _get(self,url:str,header=None) -> DataFrame:
         (status, json) = self.get(url,header)
-        if status == codes.ok:
+        if status == codes.ok or codes.no_content:
 #            return DataFrame(json)
             return json
         else:
@@ -220,11 +237,11 @@ class Highlight(RestCall):
     def _get_tags(self) -> DataFrame:
         return DataFrame(self._get(f'domains/{Highlight._instance_id}/tags/'))
 
-    # def _get_top_metric(self,metric:str) -> DataFrame:
-    #     return DataFrame(self.post(f'domains/{Highlight._instance_id}/metrics/top?metric=cloudReady&order=desc',header={'Content-type':'application/json'}))
-
-    def _get_app_from_rest(self,app:str) -> dict:
-        return DataFrame(self._get(f'domains/{Highlight._instance_id}/applications/{self.get_app_id(app)}'))
+    def _get_app_from_rest(self,app:str) -> DataFrame:
+        ap_data = self._get(f'domains/{Highlight._instance_id}/applications/{self.get_app_id(app)}')
+        df = DataFrame.from_dict(ap_data, orient='index')
+        df = df.transpose()
+        return df
 
     def get_app_id(self,app_name:str) -> int:
         """get the application id
@@ -320,28 +337,40 @@ class Highlight(RestCall):
                                             Third Party Component Data 
     ************************************************************************************************************** """
     def get_component_total(self,app_name:str) -> int:
-        third_party = len(self._get_third_party(app_name)['thirdParties'])
-        return int(third_party)
+        third_party_data = self._get_third_party(app_name)
+        if 'thirdParties' in third_party_data:
+            return len(third_party_data['thirdParties'])
+        else:
+            return 0
+
+        # third_party = len(self._get_third_party(app_name)['thirdParties'])
+        # return int(third_party)
 
     def get_cve_data(self,app_name:str) -> DataFrame:
-        third_party = self._get_third_party(app_name)['thirdParties']
-        
+        data = self._get_third_party(app_name)
+        if 'thirdParties' in data:
+            third_party = data['thirdParties']
+        else:
+            third_party = []        
         if not app_name in Highlight._cves:
             cves = DataFrame()
             for tp in third_party:
-                if 'cve' in tp:
-                    cve_df = json_normalize(tp['cve']['vulnerabilities'])
-                    cve_df.rename(columns={'name':'cve'},inplace=True)
-                    
-                    cve_df['component']=tp['name']
-                    cve_df['version']=tp['version']
-                    cve_df['languages']=tp['languages']
-                    cve_df['release']=tp['release']
-                    cve_df['origin']=tp['origin']
-                    cve_df['lastVersion']=tp['lastVersion']
+                try:
+                    if 'cve' in tp:
+                        cve_df = json_normalize(tp['cve']['vulnerabilities'])
+                        cve_df.rename(columns={'name':'cve'},inplace=True)
+                        
+                        cve_df['component']=self.in_collection(tp,'name',tp['name'])   
+                        cve_df['version']=self.in_collection(tp,'version',tp['name']) 
+                        cve_df['languages']=self.in_collection(tp,'languages',tp['name']) 
+                        cve_df['release']=self.in_collection(tp,'release',tp['name'])
+                        cve_df['origin']=self.in_collection(tp,'origin',tp['name']) 
+                        cve_df['lastVersion']=self.in_collection(tp,'lastVersion',tp['name'])
 
-                    cves=concat([cves,cve_df],ignore_index=True)
-            
+                        cves=concat([cves,cve_df],ignore_index=True)
+                except KeyError as e:
+                    self.warning(f'Key Error while retrieving cve information: {e} {tp}')    
+                    pass            
             if not cves.empty and 'component' in cves.columns:
                 cves=cves[['component','version','languages','release','origin','lastVersion','cve', 'description', 'cweId', 'cweLabel', 'criticity', 'cpe']]
 
@@ -352,16 +381,25 @@ class Highlight(RestCall):
 
     def get_cve_critical(self, app_name:str) -> DataFrame:
         cves = self.get_cve_data(app_name)
-        return cves[cves['criticity']=='CRITICAL']
+        if not cves.empty:
+            return cves[cves['criticity']=='CRITICAL']
+        
     def get_cve_high(self, app_name:str) -> DataFrame:
         cves = self.get_cve_data(app_name)
-        return cves[cves['criticity']=='HIGH']
+        if not cves.empty:
+            return cves[cves['criticity']=='HIGH']
+    
     def get_cve_medium(self, app_name:str) -> DataFrame:
         cves = self.get_cve_data(app_name)
-        return cves[cves['criticity']=='MEDIUM']
+        if not cves.empty:
+            return cves[cves['criticity']=='MEDIUM']
 
     def get_license_data(self,app_name:str) -> DataFrame:
-        third_party = self._get_third_party(app_name)['thirdParties']
+        data = self._get_third_party(app_name)
+        if 'thirdParties' in data:
+            third_party = data['thirdParties']
+        else:
+            third_party = []
         
         if not app_name in Highlight._license:
             lic = DataFrame()
@@ -391,36 +429,24 @@ class Highlight(RestCall):
 
     def get_license_high(self,app_name:str) -> DataFrame:
         lic = self.get_license_data(app_name)
+        if lic.empty:
+            return DataFrame()
         return lic[lic['compliance']=='high'] 
 
     def get_license_medium(self,app_name:str) -> DataFrame:
         lic = self.get_license_data(app_name)
+        if lic.empty:
+            return DataFrame()
         return lic[lic['compliance']=='medium']   
 
     def get_license_low(self,app_name:str) -> DataFrame:
         lic = self.get_license_data(app_name)
+        if lic.empty:
+            return DataFrame()
         return lic[lic['compliance']=='low']   
 
     """ **************************************************************************************************************
-                                            Cloud Ready Data 
-    ************************************************************************************************************** """
-    def get_cloud_detail(self,app_name:str)->DataFrame:
-        """Highlight cloud ready data
-
-        Args:
-            app_name (str): name of the application
-
-        Returns:
-            DataFrame: flattened version of the Highlight cloud ready data
-        """
-        try:
-            return json_normalize(self._get_metrics(app_name)['cloudReadyDetail'],['cloudReadyDetails'],meta=['technology','cloudReadyScan'])
-        except KeyError as ke:
-            self.warning(f'{app_name} has no Cloud Ready Data')
-            return None
-
-    """ **************************************************************************************************************
-                                            Cloud Ready Data 
+                                            Green Detail Data 
     ************************************************************************************************************** """
     def get_green_detail(self,app_name:str)->DataFrame:
         """Highlight green impact data
@@ -429,13 +455,62 @@ class Highlight(RestCall):
             app_name (str): name of the application
 
         Returns:
-            DataFrame: flattened version of the Highlight cloud ready data
+            DataFrame: flattened version of the Highlight green IT data
         """
         try:
             return json_normalize(self._get_metrics(app_name)['greenDetail'],'greenIndexDetails')
         except KeyError as ke:
             self.warning(f'{app_name} has no Green Impact Data')
             return None
+
+    """ **************************************************************************************************************
+                                            Cloud Ready Data 
+    ************************************************************************************************************** """
+    _cloud={}
+    def get_cloud_detail(self,app_name:str)->DataFrame:
+        if app_name in Highlight._cloud:
+            return Highlight._cloud[app_name]
+        
+
+        columns = ['technology','cloudRequirement.display','cloudRequirement.ruleType','roadblocks','cloudEffort','cloudRequirement.criticality','files']
+
+        data = self._get_metrics(app_name) 
+        rslt = DataFrame()
+        if 'cloudReadyDetail' in data:
+            cloud_data = json_normalize(data['cloudReadyDetail'])
+            for index,row in cloud_data.iterrows():
+                tech = row['technology']
+                db = json_normalize(row['cloudReadyDetails'])
+                db['technology']=tech
+                db = db[columns]
+
+                rslt = concat([rslt,db],ignore_index=True)
+                pass
+
+        Highlight._cloud[app_name]=rslt
+        return rslt
+    
+    _container={}
+    def get_cloud_container(self,app_name:str)->DataFrame:
+        if app_name in Highlight._container:
+            return Highlight._container[app_name]
+
+        columns = ['display','technology','impacts','criticality','roadblocks','cloudEffort']
+
+        app_id = self.get_app_id(app_name)
+        url = f'/domains/{self._instance_id}/applications/{app_id}/containerization'
+        df = DataFrame(self._get(url))
+
+        #is technology is misssing from rest call results
+        if not 'technology' in df.columns:
+            df['technology'] = ''
+
+        #filter dataframe columns 
+        df=df[columns]
+        df['impacts'] = [','.join(map(str, l)) for l in df['impacts']]
+        Highlight._container[app_name]=df
+
+        return df
 
     """ **************************************************************************************************************
                                             General Metrics Data 
@@ -481,7 +556,7 @@ class Highlight(RestCall):
         for app in app_list:
             metrics = self._get_metrics(app)
             for key in self.grades:
-                if metrics[key] is not None: 
+                if key in metrics and metrics[key] is not None: 
                     t_scores[key]+=metrics[key]
 
         t_apps = len(app_list)
@@ -516,8 +591,6 @@ class Highlight(RestCall):
 
     def get_software_health_color(self,app_name:str=None,score=None) -> RGBColor:
         return self.get_hml_color(self.get_software_health_hml(app_name,score))
-
-
 
 
 
@@ -576,15 +649,17 @@ class Highlight(RestCall):
     # def get_software_oss_safty_score(self,app_name:str) -> float:
     #     metrics = self._get_metrics(app_name)
     #     return float(metrics['openSourceSafety'])*100
-    # def get_get_software_oss_risk(self,app_name:str=None,score=None) -> str:
-    #     if score is None:
-    #         score = self.get_software_oss_safty_score(app_name)
-    #     if score > 75:
-    #         return 'low'
-    #     elif score > 52:
-    #         return 'medium'
-    #     else:
-    #         return 'high'
+
+    
+    def get_get_software_oss_risk(self,app_name:str=None,score=None) -> str:
+        if score is None:
+            score = self.get_software_oss_safty_score(app_name)
+        if score > 75:
+            return 'low'
+        elif score > 52:
+            return 'medium'
+        else:
+            return 'high'
 
     def get_software_oss_license_score(self,app_name:str) -> float:
         metrics = self._get_metrics(app_name)
@@ -609,6 +684,16 @@ class Highlight(RestCall):
             return 'moderate'
         else:
             return 'low'
+
+    def in_collection(self,collection, key,id) -> str:
+        if key in collection:
+            return collection[key]
+        else:
+            self.log.warning(f'Key {key} not found in component {id}')
+            return ''
+
+
+
 
 def load_df_element(src,dst,name):
     if not (src.get(name) is None):
