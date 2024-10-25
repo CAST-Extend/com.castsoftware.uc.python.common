@@ -82,60 +82,86 @@ class HLRestCall(RestCall):
                     cd = json_normalize(d['cloudReadyDetails'])
                     cd['Technology']=d['technology']
                     cd['Scan']=d['cloudReadyScan']
-                    rslt = concat([rslt,cd],ignore_index=True)
+
+                    if not rslt.empty and not cd.empty:
+                        rslt = concat([rslt, cd], ignore_index=True)
+                    elif rslt.empty and not cd.empty:
+                        rslt = cd.copy()
+                    pass
+                    # if rslt.empty:
+                    #     rslt = cd.copy()
+                    # elif(not cd.empty):
+                    #     rslt = concat([rslt,cd],ignore_index=True)
             except KeyError as e:
                 self.warning('Error retrieving cloud ready information')
             return rslt
         else: 
             return None
 
+    def in_collection(self,collection, key,id) -> str:
+        if key in collection:
+            return collection[key]
+        else:
+            self.warning(f'Key {key} not found in component {id}')
+            return ''
 
     def get_third_party(self, app_id):
         cves = DataFrame()
         lic = DataFrame()
 
+        self.info(f'Collecting third party information')
+
         url = f'domains/{self._hl_instance}/applications/{app_id}/thirdparty'
         (status, json) = self.get(url)
 
         third_party = []
-        if status == codes.ok and len(json) > 0:
-            third_party = json['thirdParties']
-            for tp in third_party:
-                if 'cve' in tp:
-                    cve_df = json_normalize(tp['cve']['vulnerabilities'])
-                    cve_df.rename(columns={'name':'cve'},inplace=True)
+        try:
+            if status == codes.ok and len(json) > 0:
+                third_party = json['thirdParties']
+                for tp in third_party:
+                    try:
+                        if 'cve' in tp:
+                            cve_df = json_normalize(tp['cve']['vulnerabilities'])
+                            cve_df.rename(columns={'name':'cve'},inplace=True)
+                            
+                            cve_df['component']=self.in_collection(tp,'name',tp['name'])
+                            cve_df['version']=self.in_collection(tp,'version',tp['name'])
+                            cve_df['languages']=self.in_collection(tp, 'languages',tp['name'])  
+                            cve_df['release']=self.in_collection(tp,'version',tp['name']) 
+                            cve_df['origin']=self.in_collection(tp,'origin',tp['name']) 
+                            cve_df['lastVersion']=self.in_collection(tp,'lastVersion',tp['name'])
+
+                            cves=concat([cves,cve_df],ignore_index=True)
+
+                        if 'licenses' in tp:
+                            lic_df = json_normalize(tp['licenses'], \
+                                meta = ['name','version','languages','release','origin','lastVersion'])
+                            lic_df.rename(columns={'name':'license'},inplace=True)
+                            lic_df['component']=tp['name']
+                            load_df_element(tp,lic_df,'version')
+                            load_df_element(tp,lic_df,'languages')
+                            load_df_element(tp,lic_df,'release')
+                            load_df_element(tp,lic_df,'origin')
+                            load_df_element(tp,lic_df,'lastVersion')
+                            lic=concat([lic,lic_df],ignore_index=True)
+                    except KeyError as e:
+                        self.warning(f'Key Error while retrieving third party information: {e} {tp}')    
+                        pass                        
+                if not cves.empty and 'component' in cves.columns:
+                    cves=cves[['component','version','languages','release','origin','lastVersion','cve', 'description', 'cweId', 'cweLabel', 'criticity', 'cpe']]
+                else:
+                    cves=None
                     
-                    cve_df['component']=tp['name']
-                    cve_df['version']=tp['version']
-                    cve_df['languages']=tp['languages']
-                    cve_df['release']=tp['release']
-                    cve_df['origin']=tp['origin']
-                    cve_df['lastVersion']=tp['lastVersion']
-
-                    cves=concat([cves,cve_df],ignore_index=True)
-
-                if 'licenses' in tp:
-                    lic_df = json_normalize(tp['licenses'], \
-                        meta = ['name','version','languages','release','origin','lastVersion'])
-                    lic_df.rename(columns={'name':'license'},inplace=True)
-                    lic_df['component']=tp['name']
-                    load_df_element(tp,lic_df,'version')
-                    load_df_element(tp,lic_df,'languages')
-                    load_df_element(tp,lic_df,'release')
-                    load_df_element(tp,lic_df,'origin')
-                    load_df_element(tp,lic_df,'lastVersion')
-                    lic=concat([lic,lic_df],ignore_index=True)
-
-            if not cves.empty and 'component' in cves.columns:
-                cves=cves[['component','version','languages','release','origin','lastVersion','cve', 'description', 'cweId', 'cweLabel', 'criticity', 'cpe']]
-            else:
-                cves=None
-                
-            if not lic.empty and  'component' in lic.columns:
-                lic=lic[['component','version','languages','release','origin','lastVersion','license','compliance']] 
-            else:
-                lic=None
-
+                if not lic.empty and  'component' in lic.columns:
+                    lic=lic[['component','version','languages','release','origin','lastVersion','license','compliance']] 
+                else:
+                    lic=None
+        except Exception as e:
+            self.error('Error retrieving third party information')
+            ex_type, ex_value, ex_traceback = exc_info()
+            self.log.warning(f'{ex_type.__name__}: {ex_value} while in {__class__}')
+            raise e 
+                    
         return lic,cves,len(third_party)
     
     def create_an_app(self, instance_id, app_name):

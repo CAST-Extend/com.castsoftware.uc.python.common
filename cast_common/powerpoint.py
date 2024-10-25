@@ -67,10 +67,11 @@ class PowerPoint():
                             return shape
                         else:
                             rslt.append(shape)
-        if len(rslt) == 0:
-            return None
-        else: 
+
+        if all:
             return rslt
+        else:
+            return None
 
     """ **************************************************************************************************************
                                             Text Replace Functionality 
@@ -94,6 +95,18 @@ class PowerPoint():
                 self._replace_slide_text(s, search_str, repl)
         else:
             self._replace_slide_text(slide, search_str, repl)
+
+    def replace_textbox (self, shape_name:str, repl:str, slide:int=None):
+        #get all shape with the provided name
+        found = False
+        shapes = self.get_shape_by_name(shape_name,use_slide=slide,all=True)
+        for shape in shapes:
+            if not shape is None:
+                if shape.has_text_frame:
+                    for paragraph in shape.text_frame.paragraphs:
+                        self._replace_paragraph_text(paragraph,paragraph.text,repl)
+                        found=True
+        return found
 
     def _replace_slide_text (self, slide, search_str, repl):
         for shape in slide.shapes:
@@ -595,9 +608,17 @@ class PowerPoint():
         return run
 
     def replace_shape_name (self, slide, search_str, repl_str):
+        def update_name(shape,search_str,repl_str) -> None:
+            shape.name = shape.name.replace(search_str,repl_str)
+
         for shape in slide.shapes:
-            if shape.name.find(search_str) != -1: 
-                shape.name = shape.name.replace(search_str,repl_str)
+            if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+                for grp_shape in shape.shapes:
+                    if grp_shape.name.find(search_str) != -1: 
+                        update_name(grp_shape,search_str,repl_str)
+            else:
+                if shape.name.find(search_str) != -1: 
+                    update_name(shape,search_str,repl_str)
 
     def get_page_no(self,shape):
         page_no = 0
@@ -689,7 +710,7 @@ class PowerPoint():
                                                     value.rId)
 
             except AttributeError as err:
-                self.log.error(f'Attribute Error {err} while copying slide {index} part {key}')
+                self.log.error(f'Attribute Error {err} while copying slide {index} part {key} ({err})')
             except KeyError as ex:
                 self.log.error(f'KeyError {ex} while copying slide {index} part {key}')
 

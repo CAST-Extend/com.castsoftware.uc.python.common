@@ -90,6 +90,8 @@ class RestCall(Logger):
 
             if resp.status_code == codes.ok:
                 return resp.status_code, resp.json()
+            elif resp.status_code == codes.no_content:
+                return resp.status_code, {}
             else:
                 return resp.status_code,""
 
